@@ -1,14 +1,43 @@
+# Dependencies
 node_modules
+
+# OS / editor local files
 .DS_Store
+.vscode/settings.json
+
+# Build outputs
 dist
 dist-ssr
-*.local
-count.txt
+.next/
+.output/
+out/
+build/
+*.tsbuildinfo
+
+# Environment files
 .env
-.nitro
-.tanstack
-.wrangler
-.output
-.vinxi
+.env.*
+!.env.example
+*.local
+
+# Local app/runtime artifacts
+count.txt
 todos.json
 mastra.db*
+amplify_outputs.json
+
+# Amplify generated artifacts
+.amplify/
+
+# Tooling metadata
+.atl/
+.pi/
+
+# Logs and test artifacts
+*.log
+coverage/
+test-results/
+playwright-report/
+
+# Deployment metadata
+.vercel/

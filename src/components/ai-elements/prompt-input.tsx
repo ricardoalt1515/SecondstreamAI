@@ -11,6 +11,7 @@ import type {
   FormEvent,
   FormEventHandler,
   HTMLAttributes,
+  JSX,
   KeyboardEventHandler,
   PropsWithChildren,
   MouseEvent as ReactMouseEvent,
@@ -391,8 +392,10 @@ export const PromptInputActionAddAttachments = ({
     attachments.openFileDialog();
   }, [attachments]);
 
-  const handleSelect = useCallback(
-    (e: Event) => {
+  const handleSelect = useCallback<
+    NonNullable<ComponentProps<typeof DropdownMenuItem>["onSelect"]>
+  >(
+    (e) => {
       openDialog();
       e.preventDefault();
     },
@@ -1122,8 +1125,8 @@ export const PromptInputSubmit = ({
     Icon = <XIcon className="size-4" />;
   }
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClick = useCallback<NonNullable<ComponentProps<typeof InputGroupButton>["onClick"]>>(
+    (e) => {
       if (isGenerating && onStop) {
         e.preventDefault();
         onStop();
@@ -1188,15 +1191,16 @@ export const PromptInputSelectValue = ({ className, ...props }: PromptInputSelec
   <SelectValue className={cn(className)} {...props} />
 );
 
-export type PromptInputHoverCardProps = ComponentProps<typeof HoverCard>;
+export type PromptInputHoverCardProps = ComponentProps<typeof HoverCard> & {
+  closeDelay?: number;
+  openDelay?: number;
+};
 
 export const PromptInputHoverCard = ({
-  openDelay = 0,
-  closeDelay = 0,
+  openDelay: _openDelay = 0,
+  closeDelay: _closeDelay = 0,
   ...props
-}: PromptInputHoverCardProps) => (
-  <HoverCard closeDelay={closeDelay} openDelay={openDelay} {...props} />
-);
+}: PromptInputHoverCardProps) => <HoverCard {...props} />;
 
 export type PromptInputHoverCardTriggerProps = ComponentProps<typeof HoverCardTrigger>;
 

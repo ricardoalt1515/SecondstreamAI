@@ -1,3 +1,4 @@
+import Image, { type ImageProps } from "next/image";
 import type { ComponentProps, ReactNode } from "react";
 
 import {
@@ -84,7 +85,7 @@ export const ModelSelectorSeparator = (props: ModelSelectorSeparatorProps) => (
   <CommandSeparator {...props} />
 );
 
-export type ModelSelectorLogoProps = Omit<ComponentProps<"img">, "src" | "alt"> & {
+export type ModelSelectorLogoProps = Omit<ImageProps, "alt" | "height" | "src" | "width"> & {
   provider:
     | "moonshotai-cn"
     | "lucidquery"
@@ -147,12 +148,13 @@ export type ModelSelectorLogoProps = Omit<ComponentProps<"img">, "src" | "alt"> 
 };
 
 export const ModelSelectorLogo = ({ provider, className, ...props }: ModelSelectorLogoProps) => (
-  <img
+  <Image
     {...props}
     alt={`${provider} logo`}
     className={cn("size-3 dark:invert", className)}
     height={12}
     src={`https://models.dev/logos/${provider}.svg`}
+    unoptimized
     width={12}
   />
 );

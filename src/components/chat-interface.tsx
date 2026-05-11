@@ -1,9 +1,13 @@
+"use client";
+
 import { useChat } from "@ai-sdk/react";
+import { cloneThread, type Thread } from "@app/actions/threads";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type PrepareSendMessagesRequest } from "ai";
 import { GitBranchIcon, GlobeIcon, RefreshCcwIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import type * as React from "react";
 import { useCallback } from "react";
 import {
@@ -11,6 +15,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import { DiscoveryReportBundle } from "@/components/ai-elements/discovery-report-bundle";
 import {
   Message,
   MessageAction,
@@ -25,9 +30,46 @@ import { Source, SourceContent, SourceTrigger } from "@/components/ai-elements/s
 import { WorkingMemoryUpdate } from "@/components/ai-elements/working-memory-update";
 import { ChatPromptComposer } from "@/components/chat-prompt-composer";
 import { canSubmitPromptMessage, shouldShowLoadingShimmer } from "@/lib/chat-utils";
-import { cloneThread, type Thread } from "@/server/threads";
 import type { MyUIMessage } from "@/types/ui-message";
 import { CopyButton } from "./copy-button";
+
+type ChatSendRequestInput = Pick<
+  Parameters<PrepareSendMessagesRequest<MyUIMessage>>[0],
+  "body" | "messageId" | "messages" | "trigger"
+>;
+
+export const prepareChatSendMessagesRequest = ({
+  body,
+  messageId,
+  messages,
+  trigger,
+}: ChatSendRequestInput): { body: object } => {
+  const requestBody = body ?? {};
+
+  return {
+    body: {
+      threadId: requestBody.threadId,
+      messages,
+      trigger,
+      messageId,
+      modelId: requestBody.modelId,
+      webSearchEnabled:
+        typeof requestBody.webSearchEnabled === "boolean" ? requestBody.webSearchEnabled : false,
+    },
+  };
+};
+
+export function ChatRuntimeError({ message }: { message: string }): React.JSX.Element {
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive text-sm"
+    >
+      <p className="font-medium">Chat request failed</p>
+      <p className="mt-1 text-destructive/90">{message}</p>
+    </div>
+  );
+}
 
 export function ChatInterface({
   initialMessages = [],
@@ -38,16 +80,12 @@ export function ChatInterface({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const branchMutation = useMutation({
-    mutationFn: (upToMessageId: string) =>
-      cloneThread({
-        data: { sourceThreadId: threadId, upToMessageId },
-      }),
+    mutationFn: (upToMessageId: string) => cloneThread({ sourceThreadId: threadId, upToMessageId }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["threads"] });
-      navigate({ to: "/c/$threadId", params: { threadId: result.thread.id } });
+      router.push(`/c/${result.thread.id}`);
     },
   });
 
@@ -87,6 +125,7 @@ export function ChatInterface({
       body: {
         threadId,
       },
+      prepareSendMessagesRequest: prepareChatSendMessagesRequest,
     }),
   });
 
@@ -108,12 +147,10 @@ export function ChatInterface({
       });
 
       if (isEmptyState) {
-        router.history._ignoreSubscribers = true;
-        window.history.replaceState({}, "", `/c/${threadId}`);
-        router.history._ignoreSubscribers = false;
+        router.replace(`/c/${threadId}`);
       }
     },
-    [clearError, sendMessage, threadId, isEmptyState],
+    [clearError, sendMessage, threadId, isEmptyState, router],
   );
 
   return (
@@ -131,6 +168,7 @@ export function ChatInterface({
             <h1 className="text-foreground text-5xl font-medium tracking-tight">
               What can I help with?
             </h1>
+            {error ? <ChatRuntimeError message={error.message} /> : null}
             <ChatPromptComposer
               className="w-full"
               errorMessage={error?.message ?? null}
@@ -177,10 +215,13 @@ export function ChatInterface({
                                 if (isImage) {
                                   return (
                                     <div key={`${message.id}-${i}`} className="mb-2">
-                                      <img
+                                      <Image
                                         alt={part.filename ?? "Uploaded image"}
                                         className="max-h-80 rounded-lg border object-contain"
+                                        height={320}
                                         src={part.url}
+                                        unoptimized
+                                        width={640}
                                       />
                                     </div>
                                   );
@@ -191,7 +232,7 @@ export function ChatInterface({
                                     key={`${message.id}-${i}`}
                                     className="mb-2 inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm"
                                   >
-                                     <span className="font-medium">Attachment:</span>
+                                    <span className="font-medium">Attachment:</span>
                                     <span>{part.filename ?? part.mediaType}</span>
                                   </div>
                                 );
@@ -249,6 +290,22 @@ export function ChatInterface({
                                     }
                                   />
                                 );
+                              case "tool-generateDiscoveryReportBundle":
+                                return (
+                                  <DiscoveryReportBundle
+                                    key={`${message.id}-${i}`}
+                                    state={part.state}
+                                    input={
+                                      part.state === "input-available" ||
+                                      part.state === "output-available"
+                                        ? part.input
+                                        : undefined
+                                    }
+                                    output={
+                                      part.state === "output-available" ? part.output : undefined
+                                    }
+                                  />
+                                );
                               default:
                                 return null;
                             }
@@ -303,6 +360,8 @@ export function ChatInterface({
                     </Message>
                   </motion.div>
                 )}
+
+                {error ? <ChatRuntimeError message={error.message} /> : null}
               </ConversationContent>
               <ConversationScrollButton />
             </Conversation>

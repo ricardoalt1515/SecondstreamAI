@@ -85,10 +85,10 @@ export function parseChatRequest(params: unknown): ChatRequest {
     );
 
   if (fileParts.length > MAX_ATTACHMENTS_PER_REQUEST) {
-      throw new ChatRequestValidationError(
-        ATTACHMENT_ERROR_CODES.tooManyFiles,
-        `Too many attachments. You can send up to ${MAX_ATTACHMENTS_PER_REQUEST} files per message.`,
-      );
+    throw new ChatRequestValidationError(
+      ATTACHMENT_ERROR_CODES.tooManyFiles,
+      `Too many attachments. You can send up to ${MAX_ATTACHMENTS_PER_REQUEST} files per message.`,
+    );
   }
 
   const model = MODEL_BY_ID.get(parsed.modelId);

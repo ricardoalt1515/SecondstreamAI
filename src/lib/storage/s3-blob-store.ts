@@ -194,12 +194,14 @@ class AwsS3BlobStore implements BlobStore {
         ...headers,
         Authorization: authorization,
       },
-      body: input.body,
+      body: input.body ? new Uint8Array(input.body) : undefined,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`S3 request failed (${response.status} ${response.statusText}): ${errorText}`);
+      throw new Error(
+        `S3 request failed (${response.status} ${response.statusText}): ${errorText}`,
+      );
     }
 
     return response;
@@ -210,4 +212,5 @@ export const createInMemoryS3BlobStore = (
   config: Pick<S3BlobStoreConfig, "bucket" | "prefix" | "region">,
 ): BlobStore => new InMemoryS3BlobStore(config);
 
-export const createS3BlobStore = (config: S3BlobStoreConfig): BlobStore => new AwsS3BlobStore(config);
+export const createS3BlobStore = (config: S3BlobStoreConfig): BlobStore =>
+  new AwsS3BlobStore(config);

@@ -1,18 +1,48 @@
+import type { ToolExecuteFunction } from "ai";
 import { describe, expect, it, vi } from "vitest";
+
+type LoadSkillResult = {
+  skillName: string;
+  content: string;
+  loaded: boolean;
+  error?: string;
+};
 
 // Mock the ai module to avoid opentelemetry issues in tests
 vi.mock("ai", () => ({
-  tool: vi.fn((config: any) => config),
+  tool: vi.fn((config: unknown) => config),
 }));
 
 const { loadSkillTool } = await import("./load-skill");
 
+const executeLoadSkill = loadSkillTool.execute as ToolExecuteFunction<
+  { name: string },
+  LoadSkillResult
+>;
+
+function isAsyncIterable<T>(value: T | AsyncIterable<T>): value is AsyncIterable<T> {
+  return Symbol.asyncIterator in Object(value);
+}
+
+async function loadSkill(name: string, toolCallId: string): Promise<LoadSkillResult> {
+  const result = await executeLoadSkill(
+    { name },
+    {
+      toolCallId,
+      messages: [],
+    },
+  );
+
+  if (isAsyncIterable(result)) {
+    throw new TypeError("loadSkillTool returned an async iterable result");
+  }
+
+  return result;
+}
+
 describe("loadSkillTool", () => {
   it("debería cargar skill existente correctamente", async () => {
-    const result = await loadSkillTool.execute({ name: "commercial-shaping" }, {
-      toolCallId: "test-1",
-      messages: [],
-    });
+    const result = await loadSkill("commercial-shaping", "test-1");
 
     expect(result.loaded).toBe(true);
     expect(result.skillName).toBe("commercial-shaping");
@@ -22,10 +52,7 @@ describe("loadSkillTool", () => {
   });
 
   it("debería manejar skill no existente", async () => {
-    const result = await loadSkillTool.execute({ name: "non-existent-skill" }, {
-      toolCallId: "test-2",
-      messages: [],
-    });
+    const result = await loadSkill("non-existent-skill", "test-2");
 
     expect(result.loaded).toBe(false);
     expect(result.skillName).toBe("non-existent-skill");
@@ -35,21 +62,15 @@ describe("loadSkillTool", () => {
   });
 
   it("debería cargar skill de multimodal-intake", async () => {
-    const result = await loadSkillTool.execute({ name: "multimodal-intake" }, {
-      toolCallId: "test-3",
-      messages: [],
-    });
+    const result = await loadSkill("multimodal-intake", "test-3");
 
     expect(result.loaded).toBe(true);
-    expect(result.content).toContain("Multimodal Intake");
-    expect(result.content).toContain("Photographs");
+    expect(result.content).toContain("Multimodal intake");
+    expect(result.content).toContain("Photos");
   });
 
   it("debería cargar skill de safety-flagging", async () => {
-    const result = await loadSkillTool.execute({ name: "safety-flagging" }, {
-      toolCallId: "test-4",
-      messages: [],
-    });
+    const result = await loadSkill("safety-flagging", "test-4");
 
     expect(result.loaded).toBe(true);
     expect(result.content).toContain("STOP-FLAG");
@@ -57,24 +78,18 @@ describe("loadSkillTool", () => {
   });
 
   it("debería cargar skill de qualification-gate", async () => {
-    const result = await loadSkillTool.execute({ name: "qualification-gate" }, {
-      toolCallId: "test-5",
-      messages: [],
-    });
+    const result = await loadSkill("qualification-gate", "test-5");
 
     expect(result.loaded).toBe(true);
-    expect(result.content).toContain("QUALIFICATION GATE");
-    expect(result.content).toContain("six-criteria");
+    expect(result.content).toContain("Qualification gate");
+    expect(result.content).toContain("The six criteria");
   });
 
   it("debería cargar skill de trainee-mode", async () => {
-    const result = await loadSkillTool.execute({ name: "trainee-mode" }, {
-      toolCallId: "test-6",
-      messages: [],
-    });
+    const result = await loadSkill("trainee-mode", "test-6");
 
     expect(result.loaded).toBe(true);
-    expect(result.content).toContain("Trainee Mode");
-    expect(result.content).toContain("explanatory");
+    expect(result.content).toContain("Trainee mode");
+    expect(result.content).toContain("explanation");
   });
 });

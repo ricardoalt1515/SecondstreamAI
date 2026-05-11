@@ -1,5 +1,6 @@
+import { getWorkingMemory, updateWorkingMemory } from "@app/actions/memory";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +17,6 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { WorkingMemory } from "@/config/working-memory";
 import { useTheme } from "@/hooks/use-theme";
-import { updateWorkingMemory, workingMemoryQueryOptions } from "@/server/memory";
 
 const THEME_LABELS: Record<string, string> = {
   system: "System",
@@ -32,9 +32,13 @@ type SettingsDialogProps = {
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
+  const nameId = useId();
+  const traitsId = useId();
+  const anythingElseId = useId();
 
   const { data } = useQuery({
-    ...workingMemoryQueryOptions,
+    queryKey: ["working-memory"],
+    queryFn: getWorkingMemory,
     enabled: open,
   });
 
@@ -51,7 +55,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: (memory: WorkingMemory) => updateWorkingMemory({ data: memory }),
+    mutationFn: (memory: WorkingMemory) => updateWorkingMemory(memory),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["working-memory"] });
       toast.success("Personalization saved");
@@ -121,9 +125,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="wm-name">Name</Label>
+            <Label htmlFor={nameId}>Name</Label>
             <Input
-              id="wm-name"
+              id={nameId}
               placeholder="What should OpenChat call you?"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -131,9 +135,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="wm-traits">Personality traits</Label>
+            <Label htmlFor={traitsId}>Personality traits</Label>
             <Input
-              id="wm-traits"
+              id={traitsId}
               placeholder="concise, empathetic, curious"
               value={traits}
               onChange={(e) => setTraits(e.target.value)}
@@ -144,9 +148,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="wm-anything">Additional context</Label>
+            <Label htmlFor={anythingElseId}>Additional context</Label>
             <Textarea
-              id="wm-anything"
+              id={anythingElseId}
               placeholder="Preferences, project context, constraints..."
               value={anythingElse}
               onChange={(e) => setAnythingElse(e.target.value)}

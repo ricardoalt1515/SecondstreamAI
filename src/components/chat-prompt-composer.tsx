@@ -19,12 +19,12 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
-  usePromptInputController,
   usePromptInputAttachments,
+  usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import {
-  MAX_ATTACHMENTS_PER_REQUEST,
   MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS_PER_REQUEST,
   SUPPORTED_ATTACHMENT_MIME_PATTERNS,
 } from "@/config/models";
 import { useDraftInput } from "@/hooks/use-draft-input";
@@ -63,10 +63,14 @@ function PromptComposerStateWatcher({
 }): React.JSX.Element | null {
   const attachments = usePromptInputAttachments();
   const { textInput } = usePromptInputController();
+  const attachmentCount = attachments.files.length;
+  const draftValue = textInput.value;
 
   useEffect(() => {
+    void attachmentCount;
+    void draftValue;
     onComposerChange();
-  }, [attachments.files.length, onComposerChange, textInput.value]);
+  }, [attachmentCount, draftValue, onComposerChange]);
 
   return null;
 }
@@ -96,18 +100,16 @@ function PdfInstructionHint(): React.JSX.Element | null {
   const attachments = usePromptInputAttachments();
   const { textInput } = usePromptInputController();
 
-  const hasPdfAttachment = attachments.files.some(
-    (file) => file.mediaType === "application/pdf",
-  );
+  const hasPdfAttachment = attachments.files.some((file) => file.mediaType === "application/pdf");
 
   if (!hasPdfAttachment || textInput.value.trim().length > 0) {
     return null;
   }
 
   return (
-    <div className="px-3 pb-1 text-muted-foreground text-xs" role="status">
+    <output className="block px-3 pb-1 text-muted-foreground text-xs">
       Add a short instruction.
-    </div>
+    </output>
   );
 }
 
@@ -115,9 +117,7 @@ function PromptSubmitButton({ status }: { status: ChatStatus }): React.JSX.Eleme
   const attachments = usePromptInputAttachments();
   const { textInput } = usePromptInputController();
 
-  const hasPdfAttachment = attachments.files.some(
-    (file) => file.mediaType === "application/pdf",
-  );
+  const hasPdfAttachment = attachments.files.some((file) => file.mediaType === "application/pdf");
 
   const requiresInstruction = hasPdfAttachment && textInput.value.trim().length === 0;
 

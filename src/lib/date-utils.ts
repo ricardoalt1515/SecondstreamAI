@@ -46,13 +46,16 @@ export function groupByDate<T>(items: T[], getDate: (item: T) => string | Date):
       buckets.set(key, []);
       orderedKeys.push(key);
     }
-    buckets.get(key)!.push(item);
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(item);
+    }
   }
 
-  return orderedKeys.map((key) => ({
-    label: key,
-    items: buckets.get(key)!,
-  }));
+  return orderedKeys.flatMap((key) => {
+    const bucket = buckets.get(key);
+    return bucket ? [{ label: key, items: bucket }] : [];
+  });
 }
 
 // ── Internal helpers ──────────────────────────────────────

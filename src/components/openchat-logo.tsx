@@ -1,21 +1,15 @@
-import { useTheme } from "@/hooks/use-theme";
+import Image from "next/image";
 
-export function OpenChatLogo({
-  className,
-}: {
-  className?: string;
-}): React.JSX.Element {
-  const { theme, systemTheme } = useTheme();
-
-  const currentTheme = theme === "system" ? systemTheme : theme;
-  // Logos invertidos: en modo oscuro usar el logo claro, y viceversa
-  const logoSrc = currentTheme === "dark" ? "/logo-light.svg" : "/logo-dark.svg";
-
+export function OpenChatLogo({ className }: { className?: string }): React.JSX.Element {
   return (
-    <img 
-      src={logoSrc} 
-      alt="SecondStream Logo" 
-      className={`h-full w-auto object-contain ${className}`}
+    <Image
+      src="/logo-dark.svg"
+      alt="SecondStream Logo"
+      className={`object-contain dark:invert ${className}`}
+      height={32}
+      priority
+      style={{ height: "100%", width: "auto" }}
+      width={160}
     />
   );
 }

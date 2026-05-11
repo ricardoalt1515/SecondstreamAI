@@ -1,6 +1,11 @@
+"use client";
+
+import { cloneThread, deleteThread, getThreads, type Thread } from "@app/actions/threads";
+import { useAuthenticator } from "@aws-amplify/ui-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronsUpDown, GitBranch, Search, Settings, SquarePen, X } from "lucide-react";
+import { ChevronsUpDown, GitBranch, LogOut, Search, Settings, SquarePen, X } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import type * as React from "react";
 import { useState } from "react";
 import { ChatSearch } from "@/components/chat-search";
@@ -38,7 +43,6 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { groupByDate } from "@/lib/date-utils";
-import { cloneThread, deleteThread, type Thread, threadsQueryOptions } from "@/server/threads";
 
 type SidebarActionItem = {
   id: "new-chat" | "search-chats";
@@ -60,18 +64,20 @@ const SIDEBAR_ACTIONS: ReadonlyArray<SidebarActionItem> = [
 ];
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const { user, signOut } = useAuthenticator((context) => [context.user]);
   const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [threadToDelete, setThreadToDelete] = useState<Thread | null>(null);
-  const { threadId: activeThreadId } = useParams({ strict: false });
-  const { data } = useQuery(threadsQueryOptions);
+  const params = useParams<{ threadId?: string }>();
+  const activeThreadId = params?.threadId;
+  const { data } = useQuery({ queryKey: ["threads"], queryFn: getThreads });
   const threads = data?.threads ?? [];
   const groupedThreads = groupByDate(threads, (t) => t.updatedAt);
 
   const deleteThreadMutation = useMutation({
-    mutationFn: (threadId: string) => deleteThread({ data: { threadId } }),
+    mutationFn: (threadId: string) => deleteThread({ threadId }),
     onMutate: async (threadId) => {
       await queryClient.cancelQueries({ queryKey: ["threads"] });
 
@@ -97,13 +103,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.J
   });
 
   const branchThreadMutation = useMutation({
-    mutationFn: (sourceThreadId: string) => cloneThread({ data: { sourceThreadId } }),
+    mutationFn: (sourceThreadId: string) => cloneThread({ sourceThreadId }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["threads"] });
-      navigate({
-        to: "/c/$threadId",
-        params: { threadId: result.thread.id },
-      });
+      router.push(`/c/${result.thread.id}`);
     },
   });
 
@@ -115,16 +118,25 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.J
     setThreadToDelete(null);
 
     if (isActive) {
-      navigate({ to: "/" });
+      router.push("/");
     }
   };
 
   const handleAction = (actionId: SidebarActionItem["id"]) => {
     if (actionId === "new-chat") {
-      navigate({ to: "/" });
+      router.push("/");
     } else if (actionId === "search-chats") {
       setSearchOpen(true);
     }
+  };
+
+  const displayName = user?.signInDetails?.loginId ?? user?.username ?? "Signed in";
+  const initials = displayName.slice(0, 2).toUpperCase();
+
+  const handleSignOut = () => {
+    signOut();
+    queryClient.clear();
+    router.push("/login");
   };
 
   return (
@@ -170,7 +182,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.J
                   {group.items.map((thread) => (
                     <SidebarMenuItem key={thread.id}>
                       <SidebarMenuButton
-                        render={<Link to="/c/$threadId" params={{ threadId: thread.id }} />}
+                        render={<Link href={`/c/${thread.id}`} />}
                         isActive={thread.id === activeThreadId}
                         aria-label={thread.title ?? "Untitled stream"}
                       >
@@ -224,11 +236,13 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.J
                   }
                 >
                   <div className="bg-orange-500 text-white flex size-9 shrink-0 aspect-square items-center justify-center rounded-full text-lg font-medium group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:text-base">
-                    GU
+                    {initials}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                    <span className="truncate font-medium">Guest User</span>
-                    <span className="text-muted-foreground truncate text-xs">Plus</span>
+                    <span className="truncate font-medium">{displayName}</span>
+                    <span className="text-muted-foreground truncate text-xs">
+                      Private workspace
+                    </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
                 </DropdownMenuTrigger>
@@ -241,6 +255,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.J
                   <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
                     <Settings />
                     Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <LogOut />
+                    Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

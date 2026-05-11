@@ -9,10 +9,16 @@
     "ignoreUnknown": false,
     "includes": [
       "**/src/**/*",
+      "**/app/**/*",
+      "!**/.next/**/*",
+      "**/amplify/**/*",
       "**/.vscode/**/*",
       "**/index.html",
-      "**/vite.config.ts",
-      "!**/src/routeTree.gen.ts",
+      "**/middleware.ts",
+      "**/middleware.test.ts",
+      "**/next.config.ts",
+      "**/postcss.config.mjs",
+      "**/vitest.config.ts",
       "!**/src/styles.css"
     ]
   },

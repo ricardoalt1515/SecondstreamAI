@@ -1,7 +1,7 @@
-import { tool } from "ai";
-import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { tool } from "ai";
+import { z } from "zod";
 
 const SKILLS_BASE_DIR = "./src/ai/skills";
 
@@ -16,9 +16,7 @@ export const loadSkillTool = tool({
   inputSchema: z.object({
     name: z
       .string()
-      .describe(
-        'The exact skill name to load (e.g., "multimodal-intake", "commercial-shaping")',
-      ),
+      .describe('The exact skill name to load (e.g., "multimodal-intake", "commercial-shaping")'),
   }),
   execute: async ({ name }) => {
     try {

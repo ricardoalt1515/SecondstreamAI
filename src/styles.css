@@ -1,10 +1,8 @@
 @import 'tailwindcss';
 
-@import 'tw-animate-css';
+@import "../node_modules/tw-animate-css/dist/tw-animate.css";
 
-@import "tw-animate-css";
-
-@import "shadcn/tailwind.css";
+@import "../node_modules/shadcn/dist/tailwind.css";
 
 @import "@fontsource-variable/geist";
 
@@ -242,10 +240,8 @@ code {
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
     @apply font-sans bg-background text-foreground;
   }
   html {

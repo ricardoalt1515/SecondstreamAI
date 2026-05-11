@@ -1,22 +1,25 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
   validateUIMessages,
-  type ToolLoopAgent,
 } from "ai";
-import { FAST_TITLE_RUNTIME_MODEL_ID } from "@/config/models";
-import {
-  ensureServerMessageId,
-  extractLastUserMessage,
-  isStableThreadTitle,
-} from "@/lib/chat-runtime";
+import { getEnv } from "@/config/env";
+import { MODELS } from "@/config/models";
+import type { StreamAgent } from "@/lib/agents/registry";
+import { getCurrentOwner, type OwnerContext } from "@/lib/auth/server";
 import {
   ATTACHMENT_ERROR_CODES,
   ChatRequestValidationError,
   parseChatRequest,
 } from "@/lib/chat-helpers";
+import {
+  ensureServerMessageId,
+  extractLastUserMessage,
+  isStableThreadTitle,
+} from "@/lib/chat-runtime";
 import {
   attachmentRefToPersistedPart,
   buildAttachmentRef,
@@ -27,18 +30,22 @@ import type { BlobStore } from "@/lib/storage/blob-store";
 import type { ChatStore } from "@/lib/storage/chat-store";
 import { getChatStore } from "@/lib/storage/chat-store";
 import { createS3BlobStore } from "@/lib/storage/s3-blob-store";
-import { getEnv } from "@/config/env";
 import type { MyUIMessage } from "@/types/ui-message";
 
-const RESOURCE_ID = "user-id";
-
 type GenerateTextFn = typeof generateText;
+
+const BEDROCK_PROVIDER = createAmazonBedrock({
+  region: process.env.AWS_REGION || "us-east-1",
+});
+
+const DEFAULT_BEDROCK_MODEL_ID = MODELS[0].runtimeModelId;
 
 type Dependencies = {
   chatStore: ChatStore;
   blobStore: BlobStore;
-  agent: ToolLoopAgent;
+  agent: StreamAgent;
   generateText: GenerateTextFn;
+  getOwner: () => Promise<OwnerContext>;
 };
 
 const titlePrompt = (text: string): string =>
@@ -46,12 +53,8 @@ const titlePrompt = (text: string): string =>
 
 // Title generation model - using same model as main agent for consistency
 const createTitleModel = () => {
-  const { createAmazonBedrock } = require("@ai-sdk/amazon-bedrock");
-  const bedrock = createAmazonBedrock({ 
-    region: process.env.AWS_REGION || "us-east-1" 
-  });
   // Use Claude Sonnet 4.6 for title generation (same as main agent)
-  return bedrock("us.anthropic.claude-sonnet-4-6");
+  return BEDROCK_PROVIDER(DEFAULT_BEDROCK_MODEL_ID);
 };
 
 const sanitizeTitle = (title: string): string => {
@@ -63,18 +66,15 @@ const sanitizeTitle = (title: string): string => {
   return next.slice(0, 80);
 };
 
-const toAssistantMessage = (event: { text?: string }): MyUIMessage | null => {
-  const text = typeof event.text === "string" ? event.text.trim() : "";
-
-  if (!text) {
-    return null;
-  }
-
-  return ensureServerMessageId({
-    role: "assistant",
-    parts: [{ type: "text", text }],
-  });
-};
+const extractAssistantText = (message: MyUIMessage): string =>
+  message.parts
+    .filter(
+      (part): part is Extract<MyUIMessage["parts"][number], { type: "text" }> =>
+        part.type === "text",
+    )
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
 
 const decodeDataUrl = (url: string): Buffer => {
   const parts = url.split(",", 2);
@@ -127,7 +127,9 @@ const withAttachmentPersistence = async (
         url: saved.url,
       });
 
-      nextParts.push(attachmentRefToPersistedPart(metadata) as unknown as MyUIMessage["parts"][number]);
+      nextParts.push(
+        attachmentRefToPersistedPart(metadata) as unknown as MyUIMessage["parts"][number],
+      );
       continue;
     }
 
@@ -140,7 +142,9 @@ const withAttachmentPersistence = async (
     });
 
     if (existing) {
-      nextParts.push(attachmentRefToPersistedPart(existing) as unknown as MyUIMessage["parts"][number]);
+      nextParts.push(
+        attachmentRefToPersistedPart(existing) as unknown as MyUIMessage["parts"][number],
+      );
       continue;
     }
 
@@ -209,11 +213,11 @@ const withBedrockAttachmentData = async (
 
 export const createChatPostHandler = (deps: Dependencies) => {
   return async ({ request }: { request: Request }) => {
-    let params;
+    let params: ReturnType<typeof parseChatRequest>;
     try {
       params = parseChatRequest(await request.json());
     } catch (error) {
-        if (error instanceof ChatRequestValidationError) {
+      if (error instanceof ChatRequestValidationError) {
         return new Response(error.message, {
           status: error.statusCode,
           headers: {
@@ -232,11 +236,22 @@ export const createChatPostHandler = (deps: Dependencies) => {
       });
     }
 
+    const owner = await deps.getOwner();
     const thread = await deps.chatStore.getThreadById(params.threadId);
     const isNewThread = !thread;
 
+    if (thread && thread.resourceId !== owner.userId) {
+      return new Response("Thread not found.", {
+        status: 404,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "x-error-code": "THREAD_NOT_FOUND",
+        },
+      });
+    }
+
     if (!thread) {
-      await deps.chatStore.createThread(params.threadId, RESOURCE_ID, "New Chat");
+      await deps.chatStore.createThread(params.threadId, owner.userId, "New Chat");
     }
 
     const validated = await validateUIMessages<MyUIMessage>({
@@ -266,13 +281,16 @@ export const createChatPostHandler = (deps: Dependencies) => {
         });
       }
 
-      const persistedUserMessage = await withAttachmentPersistence(ensureServerMessageId(userMessage), {
-        threadId: params.threadId,
-        blobStore: deps.blobStore,
-      });
+      const persistedUserMessage = await withAttachmentPersistence(
+        ensureServerMessageId(userMessage),
+        {
+          threadId: params.threadId,
+          blobStore: deps.blobStore,
+        },
+      );
 
       await deps.chatStore.saveMessage(params.threadId, persistedUserMessage);
-      persistedHistory = await deps.chatStore.getThreadMessages(params.threadId);
+      persistedHistory = [...persistedHistory, persistedUserMessage];
     }
 
     const historyForModel = await withBedrockAttachmentData(persistedHistory, deps.blobStore);
@@ -285,56 +303,81 @@ export const createChatPostHandler = (deps: Dependencies) => {
         try {
           const result = await deps.agent.stream({
             messages: modelMessages,
-            onFinish: async (event) => {
-              const responseMessage = toAssistantMessage(event);
-
-              if (!responseMessage) {
-                return;
-              }
-
-              if (
-                params.trigger === "regenerate-message" &&
-                params.regenerateMessageId &&
-                responseMessage.role === "assistant"
-              ) {
-                await deps.chatStore.replaceAssistantMessageAfter(
-                  params.threadId,
-                  params.regenerateMessageId,
-                  responseMessage,
-                );
-              } else {
-                await deps.chatStore.saveMessage(params.threadId, responseMessage);
-              }
-
-              const currentThread = await deps.chatStore.getThreadById(params.threadId);
-              const mustGenerateTitle = !isStableThreadTitle(currentThread?.title);
-
-              if (isNewThread && mustGenerateTitle && event.text.trim().length > 0) {
-                try {
-                  const titleResult = await deps.generateText({
-                    model: createTitleModel(),
-                    prompt: titlePrompt(event.text),
-                  });
-
-                  const finalTitle = sanitizeTitle(titleResult.text);
-                  await deps.chatStore.updateThreadTitle(params.threadId, finalTitle);
-
-                  writer.write({
-                    id: `conversation-title-${params.threadId}`,
-                    type: "data-conversation-title",
-                    data: {
-                      title: finalTitle,
-                    },
-                  });
-                } catch {
-                  // keep chat response successful even if title generation fails
-                }
-              }
+            onStepFinish: async (step) => {
+              console.info("[chat] agent:step-finish", {
+                finishReason: step.finishReason,
+                toolCalls: (step.toolCalls ?? []).map(
+                  (toolCall: { toolName: string }) => toolCall.toolName,
+                ),
+                toolResults: (step.toolResults ?? []).map(
+                  (toolResult: { toolName: string }) => toolResult.toolName,
+                ),
+                textLength: step.text?.length ?? 0,
+              });
             },
           });
 
-          writer.merge(result.toUIMessageStream());
-        } catch {
+          writer.merge(
+            result.toUIMessageStream({
+              originalMessages: persistedHistory,
+              onFinish: async ({ responseMessage }: { responseMessage: MyUIMessage }) => {
+                console.info("[chat] agent:response-message", {
+                  role: responseMessage.role,
+                  parts: responseMessage.parts.map((part) => part.type),
+                });
+
+                const persistedResponseMessage = ensureServerMessageId(responseMessage);
+
+                if (
+                  params.trigger === "regenerate-message" &&
+                  params.regenerateMessageId &&
+                  persistedResponseMessage.role === "assistant"
+                ) {
+                  await deps.chatStore.replaceAssistantMessageAfter(
+                    params.threadId,
+                    params.regenerateMessageId,
+                    persistedResponseMessage,
+                  );
+                } else {
+                  await deps.chatStore.saveMessage(params.threadId, persistedResponseMessage);
+                }
+
+                const generatedText = extractAssistantText(persistedResponseMessage);
+                if (!generatedText) {
+                  return;
+                }
+
+                const currentThread = await deps.chatStore.getThreadById(params.threadId);
+                const mustGenerateTitle = !isStableThreadTitle(currentThread?.title);
+
+                if (isNewThread && mustGenerateTitle) {
+                  try {
+                    const titleResult = await deps.generateText({
+                      model: createTitleModel(),
+                      prompt: titlePrompt(generatedText),
+                    });
+
+                    const finalTitle = sanitizeTitle(titleResult.text);
+                    await deps.chatStore.updateThreadTitle(params.threadId, finalTitle);
+
+                    writer.write({
+                      id: `conversation-title-${params.threadId}`,
+                      type: "data-conversation-title",
+                      data: {
+                        title: finalTitle,
+                      },
+                    });
+                  } catch {
+                    // keep chat response successful even if title generation fails
+                  }
+                }
+              },
+            }),
+          );
+        } catch (error) {
+          console.error("[chat] agent:error", {
+            message: error instanceof Error ? error.message : String(error),
+          });
           writer.write({
             type: "error",
             errorText: "We couldn't complete the response right now.",
@@ -355,25 +398,29 @@ const getDefaultHandler = async (): Promise<ReturnType<typeof createChatPostHand
     return cachedHandler;
   }
 
-  const env = getEnv();
+  const env = process.env.CHAT_BLOB_STORE_RUNTIME === "s3" ? getEnv() : null;
   const chatStore = await getChatStore();
-  const blobStore = createS3BlobStore({
-    bucket: env.CHAT_ATTACHMENTS_S3_BUCKET,
-    prefix: env.CHAT_ATTACHMENTS_S3_PREFIX,
-    region: env.AWS_REGION,
-    accessKeyId: env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-    sessionToken: env.AWS_SESSION_TOKEN,
-  });
+  const blobStore = env
+    ? createS3BlobStore({
+        bucket: env.CHAT_ATTACHMENTS_S3_BUCKET,
+        prefix: env.CHAT_ATTACHMENTS_S3_PREFIX,
+        region: env.AWS_REGION,
+        accessKeyId: env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+        sessionToken: env.AWS_SESSION_TOKEN,
+      })
+    : (await import("@/lib/storage/amplify-blob-store")).createAmplifyBlobStore();
 
-  // Import the discovery agent with skills support
-  const { discoveryAgent } = await import("@/lib/agents/discovery-agent");
+  const { COURT_REPORTER_AGENT_ID } = await import("@/lib/agents/court-reporter-agent");
+  const { createDefaultAgentRegistry } = await import("@/lib/agents/registry");
+  const agentRegistry = await createDefaultAgentRegistry();
 
   cachedHandler = createChatPostHandler({
     chatStore,
     blobStore,
-    agent: discoveryAgent,
+    agent: agentRegistry.get(COURT_REPORTER_AGENT_ID),
     generateText,
+    getOwner: getCurrentOwner,
   });
 
   return cachedHandler;

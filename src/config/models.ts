@@ -5,11 +5,7 @@ type ProviderSlug = ModelSelectorLogoProps["provider"];
 export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_REQUEST = 5;
 
-export const SUPPORTED_ATTACHMENT_MIME_PATTERNS = [
-  "text/*",
-  "image/*",
-  "application/pdf",
-] as const;
+export const SUPPORTED_ATTACHMENT_MIME_PATTERNS = ["text/*", "image/*", "application/pdf"] as const;
 
 export const MODEL_GROUPS = ["Amazon"] as const;
 
@@ -33,7 +29,7 @@ export const MODELS = [
     id: "claude-sonnet-4-6",
     name: "Claude Sonnet 4.6",
     provider: "amazon-bedrock",
-    runtimeModelId: "us.anthropic.claude-sonnet-4-6",
+    runtimeModelId: "us.anthropic.claude-sonnet-4-6-v1",
   },
 ] as const satisfies ReadonlyArray<ModelOption>;
 
@@ -43,10 +39,9 @@ export const DEFAULT_MODEL_ID: ModelId = "claude-sonnet-4-6";
 
 export const FAST_TITLE_MODEL_ID: ModelId = "claude-sonnet-4-6";
 
-export const DEFAULT_RUNTIME_MODEL_ID = "amazon-bedrock/us.anthropic.claude-sonnet-4-6";
+export const DEFAULT_RUNTIME_MODEL_ID = "amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1";
 
-export const FAST_TITLE_RUNTIME_MODEL_ID =
-  "amazon-bedrock/us.anthropic.claude-sonnet-4-6";
+export const FAST_TITLE_RUNTIME_MODEL_ID = "amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1";
 
 export const MODEL_ID_SET = new Set<string>(MODELS.map((model) => model.id));
 

@@ -11,8 +11,7 @@ const envSchema = z.object({
 
 export type AppEnv = z.infer<typeof envSchema>;
 
-const ensureTrailingSlash = (value: string): string =>
-  value.endsWith("/") ? value : `${value}/`;
+const ensureTrailingSlash = (value: string): string => (value.endsWith("/") ? value : `${value}/`);
 
 let cachedEnv: AppEnv | null = null;
 

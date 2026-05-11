@@ -1,4 +1,4 @@
-import { createClient, type Client } from "@libsql/client";
+import { type Client, createClient } from "@libsql/client";
 import { nanoid } from "nanoid";
 import type { MyUIMessage } from "@/types/ui-message";
 
@@ -35,7 +35,11 @@ export interface ChatStore {
     messageId: string,
     nextAssistantMessage: MyUIMessage,
   ): Promise<void>;
-  cloneThread(sourceThreadId: string, resourceId: string, upToMessageId?: string): Promise<StoredThread>;
+  cloneThread(
+    sourceThreadId: string,
+    resourceId: string,
+    upToMessageId?: string,
+  ): Promise<StoredThread>;
 }
 
 class InMemoryChatStore implements ChatStore {
@@ -106,10 +110,7 @@ class InMemoryChatStore implements ChatStore {
       return;
     }
 
-    const next = [
-      ...messages.slice(0, targetIndex),
-      structuredClone(nextAssistantMessage),
-    ];
+    const next = [...messages.slice(0, targetIndex), structuredClone(nextAssistantMessage)];
 
     this.messagesByThread.set(threadId, next);
     this.touchThread(threadId);
@@ -212,13 +213,7 @@ class LibsqlChatStore implements ChatStore {
     await this.client.execute({
       sql: `INSERT OR REPLACE INTO chat_messages (id, thread_id, position, payload_json, created_at)
             VALUES (?, ?, ?, ?, ?)`,
-      args: [
-        message.id,
-        threadId,
-        nextPosition,
-        JSON.stringify(message),
-        new Date().toISOString(),
-      ],
+      args: [message.id, threadId, nextPosition, JSON.stringify(message), new Date().toISOString()],
     });
 
     await this.bumpUpdatedAt(threadId);
@@ -327,13 +322,7 @@ class LibsqlChatStore implements ChatStore {
         ...nextMessages.map((message, index) => ({
           sql: `INSERT INTO chat_messages (id, thread_id, position, payload_json, created_at)
                 VALUES (?, ?, ?, ?, ?)`,
-          args: [
-            message.id,
-            threadId,
-            index,
-            JSON.stringify(message),
-            new Date().toISOString(),
-          ],
+          args: [message.id, threadId, index, JSON.stringify(message), new Date().toISOString()],
         })),
       ],
       "write",
@@ -387,6 +376,11 @@ export const createInMemoryChatStore = (): ChatStore => new InMemoryChatStore();
 let singletonStore: ChatStore | null = null;
 
 const createDefaultStore = async (): Promise<ChatStore> => {
+  if (process.env.CHAT_STORE_RUNTIME !== "libsql") {
+    const { createAmplifyChatStore } = await import("@/lib/storage/amplify-chat-store");
+    return createAmplifyChatStore();
+  }
+
   const client = createClient({
     url: process.env.CHAT_STORE_DATABASE_URL ?? "file:./mastra.db",
   });

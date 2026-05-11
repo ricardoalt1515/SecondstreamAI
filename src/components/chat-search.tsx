@@ -1,5 +1,8 @@
+"use client";
+
+import { getThreads } from "@app/actions/threads";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
 
 import {
@@ -13,19 +16,18 @@ import {
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { groupByDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { threadsQueryOptions } from "@/server/threads";
 
 export type ChatSearchProps = ComponentProps<typeof Dialog>;
 
 export function ChatSearch({ onOpenChange, ...props }: ChatSearchProps) {
-  const navigate = useNavigate();
-  const { data } = useQuery(threadsQueryOptions);
+  const router = useRouter();
+  const { data } = useQuery({ queryKey: ["threads"], queryFn: getThreads });
   const threads = data?.threads ?? [];
   const groupedThreads = groupByDate(threads, (t) => t.updatedAt);
 
   const handleSelect = (threadId: string) => {
-    onOpenChange?.(false);
-    navigate({ to: "/c/$threadId", params: { threadId } });
+    onOpenChange?.(false, undefined as never);
+    router.push(`/c/${threadId}`);
   };
 
   return (

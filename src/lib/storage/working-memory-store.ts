@@ -1,4 +1,4 @@
-import { createClient, type Client } from "@libsql/client";
+import { type Client, createClient } from "@libsql/client";
 import type { WorkingMemory } from "@/config/working-memory";
 
 export interface WorkingMemoryStore {

@@ -57,7 +57,9 @@ export const attachmentRefToFilePart = (attachment: AttachmentRef) => {
   };
 };
 
-export const attachmentRefToPersistedPart = (attachment: AttachmentRef): PersistedAttachmentPart => {
+export const attachmentRefToPersistedPart = (
+  attachment: AttachmentRef,
+): PersistedAttachmentPart => {
   return {
     type: "file",
     mediaType: attachment.mediaType,

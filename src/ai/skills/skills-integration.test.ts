@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 
 const SKILLS_DIR = "./src/ai/skills";
 
@@ -32,12 +32,12 @@ describe("Skills Integration", () => {
   it("cada skill debería tener un archivo SKILL.md", async () => {
     for (const skillName of EXPECTED_SKILLS) {
       const skillPath = join(SKILLS_DIR, skillName, "SKILL.md");
-      
+
       try {
         const content = await readFile(skillPath, "utf-8");
         expect(content).toBeTruthy();
         expect(content.length).toBeGreaterThan(100); // Should have substantial content
-      } catch (error) {
+      } catch (_error) {
         throw new Error(`Skill ${skillName} no tiene SKILL.md o no se puede leer`);
       }
     }
@@ -54,9 +54,11 @@ describe("Skills Integration", () => {
 
       // Extract frontmatter
       const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-      expect(frontmatterMatch).toBeTruthy();
+      if (!frontmatterMatch) {
+        throw new Error(`Skill ${skillName} no tiene frontmatter válido`);
+      }
 
-      const frontmatter = frontmatterMatch![1];
+      const frontmatter = frontmatterMatch[1];
 
       // Check for required fields
       expect(frontmatter).toMatch(/name:\s*\S+/);
@@ -82,8 +84,8 @@ describe("Skills Integration", () => {
     const content = await readFile(skillPath, "utf-8");
 
     expect(content).toContain("Opportunity sizing");
-    expect(content).toContain("Product positioning");
-    expect(content).toContain("Win-ability diagnostic");
+    expect(content).toContain("Positioning and sales craft");
+    expect(content).toContain("smart questions");
   });
 
   it("safety-flagging debería tener contenido de seguridad específico", async () => {
@@ -92,15 +94,15 @@ describe("Skills Integration", () => {
 
     expect(content).toContain("STOP-FLAG");
     expect(content).toContain("safety");
-    expect(content).toContain("QUALIFICATION GATE");
+    expect(content).toContain("qualification-gate");
   });
 
   it("qualification-gate debería tener criterios de evaluación", async () => {
     const skillPath = join(SKILLS_DIR, "qualification-gate", "SKILL.md");
     const content = await readFile(skillPath, "utf-8");
 
-    expect(content).toContain("six-criteria");
-    expect(content).toContain("Volume Quantified");
-    expect(content).toContain("Composition Characterized");
+    expect(content).toContain("The six criteria");
+    expect(content).toContain("Identity pinned");
+    expect(content).toContain("Composition documented");
   });
 });

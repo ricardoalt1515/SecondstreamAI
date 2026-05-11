@@ -1,5 +1,7 @@
+"use client";
+
 /*
-  Adapted from next-themes to work with TanStack Start.
+  Adapted from next-themes for this app's client-side theme state.
   Original: https://github.com/pacocoursey/next-themes (MIT license)
 */
 
@@ -101,8 +103,15 @@ const Theme = ({
 
       enable?.();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [
+      attribute,
+      attrs,
+      defaultTheme,
+      disableTransitionOnChange,
+      enableColorScheme,
+      enableSystem,
+      value,
+    ],
   );
 
   const setTheme = React.useCallback(
@@ -144,13 +153,11 @@ const Theme = ({
 
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setTheme]);
+  }, [defaultTheme, setTheme, storageKey]);
 
   React.useEffect(() => {
     applyTheme(forcedTheme ?? theme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forcedTheme, theme]);
+  }, [applyTheme, forcedTheme, theme]);
 
   const providerValue = React.useMemo(
     () => ({
@@ -209,6 +216,7 @@ const ThemeScript = React.memo(
       <script
         suppressHydrationWarning
         nonce={typeof window === "undefined" ? nonce : ""}
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: inline no-flash theme bootstrap is static serialized code and JSON-escaped args.
         dangerouslySetInnerHTML={{
           __html: `(${script.toString()})(${scriptArgs})`,
         }}
@@ -252,8 +260,18 @@ const getSystemTheme = (e?: MediaQueryList | MediaQueryListEvent) => {
   return isDark ? "dark" : "light";
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const script: (...args: any[]) => void = (
+type ThemeScriptArgs = [
+  attribute: Attribute | Attribute[] | undefined,
+  storageKey: string | undefined,
+  defaultTheme: string,
+  forcedTheme: string | undefined,
+  themes: string[] | undefined,
+  value: ValueObject | undefined,
+  enableSystem: boolean | undefined,
+  enableColorScheme: boolean | undefined,
+];
+
+export const script: (...args: ThemeScriptArgs) => void = (
   attribute,
   storageKey,
   defaultTheme,
@@ -266,14 +284,16 @@ export const script: (...args: any[]) => void = (
   const el = document.documentElement;
   const systemThemes = ["light", "dark"];
   const isClass = attribute === "class";
-  const classes = isClass && value ? themes.map((t: string | number) => value[t] || t) : themes;
+  const classThemes = themes ?? [];
+  const classes =
+    isClass && value ? classThemes.map((themeName) => value[themeName] || themeName) : classThemes;
 
   function updateDOM(theme: string) {
     if (isClass) {
       el.classList.remove(...classes);
       el.classList.add(theme);
     } else {
-      el.setAttribute(attribute, theme);
+      el.setAttribute(typeof attribute === "string" ? attribute : "data-theme", theme);
     }
     setColorScheme(theme);
   }
@@ -292,7 +312,7 @@ export const script: (...args: any[]) => void = (
     updateDOM(forcedTheme);
   } else {
     try {
-      const themeName = localStorage.getItem(storageKey) || defaultTheme;
+      const themeName = localStorage.getItem(storageKey ?? "theme") || defaultTheme;
       const isSystem = enableSystem && themeName === "system";
       const theme = isSystem ? getSystemTheme() : themeName;
       updateDOM(theme);
