@@ -10,6 +10,13 @@ vi.mock("@/components/chat-interface", () => ({
   }),
 }));
 
+vi.mock("@/components/new-chat-page", () => ({
+  NewChatPage: (props: { resetKey: string }) => ({
+    type: "NewChatPage",
+    props,
+  }),
+}));
+
 vi.mock("@app/actions/messages", () => ({
   getThreadMessages: vi.fn(async () => ({
     messages: [{ id: "message-1", role: "user", parts: [{ type: "text", text: "hello" }] }],
@@ -39,10 +46,11 @@ describe("App Router route parity", () => {
   it("renders the root workspace with a new thread id and empty initial history", async () => {
     const { default: Page } = await import("./page");
 
-    const element = Page() as { props: { initialMessages: unknown[]; threadId: string } };
+    const element = (await Page({
+      searchParams: Promise.resolve({}),
+    })) as { props: { resetKey: string } };
 
-    expect(element.props.initialMessages).toEqual([]);
-    expect(element.props.threadId).toEqual(expect.any(String));
+    expect(element.props.resetKey).toBe("initial");
   });
 
   it("loads thread workspace messages server-side before rendering ChatInterface", async () => {

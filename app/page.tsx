@@ -1,12 +1,13 @@
-"use client";
-
-import { nanoid } from "nanoid";
 import type * as React from "react";
-import { useState } from "react";
-import { ChatInterface } from "@/components/chat-interface";
+import { NewChatPage } from "@/components/new-chat-page";
 
-export default function Page(): React.JSX.Element {
-  const [threadId] = useState(() => nanoid());
+type PageProps = {
+  searchParams: Promise<{ new?: string }>;
+};
 
-  return <ChatInterface initialMessages={[]} threadId={threadId} />;
+export default async function Page({ searchParams }: PageProps): Promise<React.JSX.Element> {
+  const params = await searchParams;
+  const resetKey = params.new ?? "initial";
+
+  return <NewChatPage resetKey={resetKey} />;
 }

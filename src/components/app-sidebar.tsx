@@ -4,6 +4,7 @@ import { cloneThread, deleteThread, getThreads, type Thread } from "@app/actions
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown, GitBranch, LogOut, Search, Settings, SquarePen, X } from "lucide-react";
+import { nanoid } from "nanoid";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type * as React from "react";
@@ -124,7 +125,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>): React.J
 
   const handleAction = (actionId: SidebarActionItem["id"]) => {
     if (actionId === "new-chat") {
-      router.push("/");
+      router.push(`/?new=${nanoid()}`);
     } else if (actionId === "search-chats") {
       setSearchOpen(true);
     }
