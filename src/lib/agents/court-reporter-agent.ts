@@ -9,9 +9,9 @@ export type CourtReporterAgentConfig = {
 
 export const courtReporterAgentConfig: CourtReporterAgentConfig = {
   id: COURT_REPORTER_AGENT_ID,
-  name: "Court Reporter",
+  name: "Water Sector",
   description:
-    "Draft-assistance agent for transcript-friendly intake, reusable sessions, review workflows, and downloadable output metadata.",
+    "Draft-assistance agent for water-sector intake, reusable sessions, review workflows, and downloadable output metadata.",
   safetyReminder:
-    "Always present generated language as draft assistance for human review; never imply certification authority.",
+    "Always present generated analysis as draft support for qualified human review; never imply regulatory, engineering, legal, or operational certification authority.",
 };

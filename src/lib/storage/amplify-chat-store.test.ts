@@ -18,6 +18,9 @@ const createMockDataClient = () => ({
       update: vi.fn(async (input) => ({ data: input })),
       delete: vi.fn(async (input) => ({ data: input })),
       list: vi.fn(async () => ({ data: [] })),
+      listMessageBySessionId: undefined as
+        | undefined
+        | ReturnType<typeof vi.fn<(input: { sessionId: string }) => Promise<{ data: unknown[] }>>>,
     },
     File: {
       create: vi.fn(async (input) => ({ data: input })),
@@ -64,6 +67,13 @@ describe("AmplifyChatStore", () => {
     );
     expect(client.models.Message.create).toHaveBeenCalledWith(
       expect.objectContaining({ id: "message-1", sessionId: "session-1", position: 0 }),
+    );
+    const createdMessage = client.models.Message.create.mock.calls[0][0] as {
+      payloadJson: unknown;
+    };
+    expect(typeof createdMessage.payloadJson).toBe("string");
+    expect(JSON.parse(String(createdMessage.payloadJson))).toEqual(
+      expect.objectContaining({ id: "message-1", role: "user" }),
     );
     expect(client.models.GeneratedOutput.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -122,5 +132,102 @@ describe("AmplifyChatStore", () => {
         sizeBytes: 100,
       },
     ]);
+  });
+
+  it("uses the Message sessionId secondary index when available", async () => {
+    const client = createMockDataClient();
+    client.models.Message.listMessageBySessionId = vi.fn(async () => ({
+      data: [
+        {
+          id: "message-1",
+          sessionId: "session-1",
+          position: 0,
+          role: "user",
+          payloadJson: {
+            id: "message-1",
+            role: "user",
+            parts: [{ type: "text", text: "Hello" }],
+          },
+        },
+      ],
+    }));
+    const store = new AmplifyChatStore(client as never);
+
+    const messages = await store.getThreadMessages("session-1");
+
+    expect(client.models.Message.listMessageBySessionId).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(client.models.Message.list).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        id: "message-1",
+        role: "user",
+        parts: [{ type: "text", text: "Hello" }],
+      },
+    ]);
+  });
+
+  it("parses payloadJson when Amplify returns AWSJSON as a string", async () => {
+    const client = createMockDataClient();
+    client.models.Message.listMessageBySessionId = vi.fn(async () => ({
+      data: [
+        {
+          id: "message-1",
+          sessionId: "session-1",
+          position: 0,
+          role: "user",
+          payloadJson: JSON.stringify({
+            id: "message-1",
+            role: "user",
+            parts: [{ type: "text", text: "Hello from AWSJSON" }],
+          }),
+        },
+      ],
+    }));
+    const store = new AmplifyChatStore(client as never);
+
+    await expect(store.getThreadMessages("session-1")).resolves.toEqual([
+      {
+        id: "message-1",
+        role: "user",
+        parts: [{ type: "text", text: "Hello from AWSJSON" }],
+      },
+    ]);
+  });
+
+  it("drops malformed payloadJson strings instead of hydrating invalid messages", async () => {
+    const client = createMockDataClient();
+    client.models.Message.listMessageBySessionId = vi.fn(async () => ({
+      data: [
+        {
+          id: "message-1",
+          sessionId: "session-1",
+          position: 0,
+          role: "user",
+          payloadJson: "{not-json",
+        },
+      ],
+    }));
+    const store = new AmplifyChatStore(client as never);
+
+    await expect(store.getThreadMessages("session-1")).resolves.toEqual([]);
+  });
+
+  it("throws when Amplify returns GraphQL errors for message creation", async () => {
+    const client = createMockDataClient();
+    client.models.Message.create.mockResolvedValueOnce({
+      data: null,
+      errors: [{ message: "Unauthorized" }],
+    } as never);
+    const store = new AmplifyChatStore(client as never);
+
+    await expect(
+      store.saveMessage("session-1", {
+        id: "message-1",
+        role: "user",
+        parts: [{ type: "text", text: "Hello" }],
+      }),
+    ).rejects.toThrow("Message.create failed");
   });
 });

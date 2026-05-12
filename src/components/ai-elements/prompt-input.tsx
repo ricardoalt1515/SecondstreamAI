@@ -1055,7 +1055,18 @@ export const PromptInputButton = ({
 
   return (
     <Tooltip>
-      <TooltipTrigger>{button}</TooltipTrigger>
+      <TooltipTrigger
+        render={(triggerProps) => (
+          <InputGroupButton
+            className={cn(className)}
+            size={newSize}
+            type="button"
+            variant={variant}
+            {...props}
+            {...triggerProps}
+          />
+        )}
+      />
       <TooltipContent side={side}>
         {tooltipContent}
         {shortcut && <span className="ml-2 text-muted-foreground">{shortcut}</span>}

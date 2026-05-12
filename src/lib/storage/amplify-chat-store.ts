@@ -13,6 +13,8 @@ const client = generateServerClientUsingCookies<Schema>({ config: outputs, cooki
 
 type AmplifyModelResult<T> = Promise<{ data: T }>;
 type AmplifyListResult<T> = Promise<{ data: T[] }>;
+type AmplifyOperationResult<T> = { data: T; errors?: unknown[] };
+type MessageRecord = Record<string, unknown> & { id: string };
 type AmplifyModelClient<T extends { id: string }> = {
   create(input: Record<string, unknown>): AmplifyModelResult<T | null>;
   get(input: { id: string }): AmplifyModelResult<T | null>;
@@ -23,7 +25,9 @@ type AmplifyModelClient<T extends { id: string }> = {
 type AmplifyDataClient = {
   models: {
     Session: AmplifyModelClient<Record<string, unknown> & { id: string }>;
-    Message: AmplifyModelClient<Record<string, unknown> & { id: string }>;
+    Message: AmplifyModelClient<MessageRecord> & {
+      listMessageBySessionId?: (input: { sessionId: string }) => AmplifyListResult<MessageRecord>;
+    };
     File: AmplifyModelClient<
       Record<string, unknown> & {
         id: string;
@@ -59,6 +63,26 @@ const isStoredUIMessage = (value: unknown): value is MyUIMessage => {
   );
 };
 
+const parseStoredPayloadJson = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const assertNoAmplifyErrors = <T>(operation: string, result: AmplifyOperationResult<T>): T => {
+  if (result.errors?.length) {
+    throw new Error(`${operation} failed: ${JSON.stringify(result.errors)}`);
+  }
+
+  return result.data;
+};
+
 export class AmplifyChatStore implements ChatStore {
   private readonly dataClient: AmplifyDataClient;
 
@@ -70,27 +94,44 @@ export class AmplifyChatStore implements ChatStore {
   }
 
   async getThreadMessages(threadId: string): Promise<MyUIMessage[]> {
-    const result = await this.dataClient.models.Message.list({
-      filter: { sessionId: { eq: threadId } },
+    const { messages, queryMode } = await this.listMessageRows(threadId);
+
+    const orderedMessages = messages
+      .slice()
+      .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
+    const parsedMessages = orderedMessages
+      .map((message) => parseStoredPayloadJson(message.payloadJson))
+      .filter(isStoredUIMessage);
+
+    console.info("[chat-store] get-thread-messages:result", {
+      threadId,
+      queryMode,
+      rawCount: messages.length,
+      parsedCount: parsedMessages.length,
+      droppedCount: orderedMessages.length - parsedMessages.length,
     });
 
-    return result.data
-      .slice()
-      .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
-      .map((message) => message.payloadJson)
-      .filter(isStoredUIMessage)
-      .map((message) => structuredClone(message));
+    return parsedMessages.map((message) => structuredClone(message));
   }
 
   async saveMessage(threadId: string, message: MyUIMessage): Promise<void> {
     const messages = await this.getThreadMessages(threadId);
-    await this.dataClient.models.Message.create({
+    const result = await this.dataClient.models.Message.create({
       id: message.id,
       sessionId: threadId,
       position: messages.length,
       role: message.role,
-      payloadJson: message,
+      payloadJson: JSON.stringify(message),
     });
+    const createdMessage = assertNoAmplifyErrors("Message.create", result);
+
+    console.info("[chat-store] save-message:created", {
+      threadId,
+      messageId: message.id,
+      role: message.role,
+      created: Boolean(createdMessage),
+    });
+
     await this.bumpUpdatedAt(threadId);
   }
 
@@ -100,8 +141,9 @@ export class AmplifyChatStore implements ChatStore {
       userId: resourceId,
       title: title ?? null,
     });
+    const createdThread = assertNoAmplifyErrors("Session.create", result);
 
-    return toThread(result.data ?? { id, userId: resourceId, title });
+    return toThread(createdThread ?? { id, userId: resourceId, title });
   }
 
   async getThreadById(threadId: string): Promise<StoredThread | null> {
@@ -124,11 +166,9 @@ export class AmplifyChatStore implements ChatStore {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    const messages = await this.dataClient.models.Message.list({
-      filter: { sessionId: { eq: threadId } },
-    });
+    const { messages } = await this.listMessageRows(threadId);
     await Promise.all(
-      messages.data.map((message) => this.dataClient.models.Message.delete({ id: message.id })),
+      messages.map((message) => this.dataClient.models.Message.delete({ id: message.id })),
     );
     await this.dataClient.models.Session.delete({ id: threadId });
   }
@@ -138,10 +178,8 @@ export class AmplifyChatStore implements ChatStore {
     messageId: string,
     nextAssistantMessage: MyUIMessage,
   ): Promise<void> {
-    const messages = await this.dataClient.models.Message.list({
-      filter: { sessionId: { eq: threadId } },
-    });
-    const ordered = messages.data
+    const { messages } = await this.listMessageRows(threadId);
+    const ordered = messages
       .slice()
       .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
     const targetIndex = ordered.findIndex((message) => message.id === messageId);
@@ -156,7 +194,7 @@ export class AmplifyChatStore implements ChatStore {
     const nextMessages = [
       ...ordered
         .slice(0, targetIndex)
-        .map((message) => message.payloadJson)
+        .map((message) => parseStoredPayloadJson(message.payloadJson))
         .filter(isStoredUIMessage),
       nextAssistantMessage,
     ];
@@ -168,7 +206,7 @@ export class AmplifyChatStore implements ChatStore {
           sessionId: threadId,
           position,
           role: message.role,
-          payloadJson: message,
+          payloadJson: JSON.stringify(message),
         }),
       ),
     );
@@ -222,6 +260,29 @@ export class AmplifyChatStore implements ChatStore {
   private async bumpUpdatedAt(threadId: string): Promise<void> {
     const current = await this.getThreadById(threadId);
     await this.dataClient.models.Session.update({ id: threadId, title: current?.title ?? null });
+  }
+
+  private async listMessageRows(
+    threadId: string,
+  ): Promise<{ messages: MessageRecord[]; queryMode: "secondary-index" | "filter-scan" }> {
+    if (this.dataClient.models.Message.listMessageBySessionId) {
+      const result = await this.dataClient.models.Message.listMessageBySessionId({
+        sessionId: threadId,
+      });
+      return {
+        messages: assertNoAmplifyErrors("Message.listMessageBySessionId", result),
+        queryMode: "secondary-index",
+      };
+    }
+
+    const result = await this.dataClient.models.Message.list({
+      filter: { sessionId: { eq: threadId } },
+    });
+
+    return {
+      messages: assertNoAmplifyErrors("Message.list", result),
+      queryMode: "filter-scan",
+    };
   }
 }
 

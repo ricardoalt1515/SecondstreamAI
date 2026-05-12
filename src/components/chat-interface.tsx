@@ -97,17 +97,23 @@ export function ChatInterface({
     },
     onData: (dataPart) => {
       if (dataPart.type === "data-new-thread-created") {
+        const newThreadId = dataPart.data.threadId;
+        window.history.replaceState(window.history.state, "", `/c/${newThreadId}`);
         queryClient.setQueryData<{ threads: Thread[] }>(["threads"], (old) => {
           const newThread: Thread = {
-            id: dataPart.data.threadId,
+            id: newThreadId,
             title: dataPart.data.title,
             resourceId: dataPart.data.resourceId,
             createdAt: dataPart.data.createdAt,
             updatedAt: dataPart.data.updatedAt,
           };
           if (!old) return { threads: [newThread] };
+          if (old.threads.some((thread) => thread.id === newThread.id)) {
+            return old;
+          }
           return { threads: [newThread, ...old.threads] };
         });
+        queryClient.invalidateQueries({ queryKey: ["threads"] });
       }
       if (dataPart.type === "data-conversation-title") {
         queryClient.setQueryData<{ threads: Thread[] }>(["threads"], (old) => {
@@ -145,12 +151,8 @@ export function ChatInterface({
           webSearchEnabled: message.webSearchEnabled,
         },
       });
-
-      if (isEmptyState) {
-        router.replace(`/c/${threadId}`);
-      }
     },
-    [clearError, sendMessage, threadId, isEmptyState, router],
+    [clearError, sendMessage],
   );
 
   return (

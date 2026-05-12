@@ -15,6 +15,7 @@ export type StreamAgent = {
     onStepFinish: (step: AgentStep) => Promise<void>;
   }) => Promise<{
     toUIMessageStream: (options: {
+      generateMessageId?: () => string;
       originalMessages: MyUIMessage[];
       onFinish: (result: { responseMessage: MyUIMessage }) => Promise<void>;
     }) => ReadableStream<InferUIMessageChunk<MyUIMessage>>;

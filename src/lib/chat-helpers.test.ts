@@ -240,7 +240,7 @@ describe("parseChatRequest", () => {
     });
 
     expect(payload.modelId).toBe("claude-sonnet-4-6");
-    expect(payload.runtimeModelId).toBe("amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1");
+    expect(payload.runtimeModelId).toBe("amazon-bedrock/us.anthropic.claude-sonnet-4-6");
   });
 
   it("rechaza más adjuntos que el límite permitido", () => {
@@ -303,7 +303,7 @@ describe("parseChatRequest", () => {
       modelId: "claude-sonnet-4-6",
     });
 
-    expect(payload.runtimeModelId).toBe("amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1");
+    expect(payload.runtimeModelId).toBe("amazon-bedrock/us.anthropic.claude-sonnet-4-6");
   });
 
   it("acepta adjuntos ya persistidos por referencia (sin data URL)", () => {

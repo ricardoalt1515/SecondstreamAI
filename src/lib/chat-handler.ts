@@ -6,6 +6,7 @@ import {
   generateText,
   validateUIMessages,
 } from "ai";
+import { nanoid } from "nanoid";
 import { getEnv } from "@/config/env";
 import { MODELS } from "@/config/models";
 import type { StreamAgent } from "@/lib/agents/registry";
@@ -250,9 +251,9 @@ export const createChatPostHandler = (deps: Dependencies) => {
       });
     }
 
-    if (!thread) {
-      await deps.chatStore.createThread(params.threadId, owner.userId, "New Chat");
-    }
+    const createdThread = !thread
+      ? await deps.chatStore.createThread(params.threadId, owner.userId, "New Chat")
+      : null;
 
     const validated = await validateUIMessages<MyUIMessage>({
       messages: params.messages,
@@ -301,6 +302,20 @@ export const createChatPostHandler = (deps: Dependencies) => {
     const stream = createUIMessageStream<MyUIMessage>({
       execute: async ({ writer }) => {
         try {
+          if (createdThread) {
+            writer.write({
+              id: `new-thread-created-${params.threadId}`,
+              type: "data-new-thread-created",
+              data: {
+                threadId: createdThread.id,
+                title: createdThread.title ?? "New Chat",
+                resourceId: createdThread.resourceId,
+                createdAt: createdThread.createdAt,
+                updatedAt: createdThread.updatedAt,
+              },
+            });
+          }
+
           const result = await deps.agent.stream({
             messages: modelMessages,
             onStepFinish: async (step) => {
@@ -320,6 +335,7 @@ export const createChatPostHandler = (deps: Dependencies) => {
           writer.merge(
             result.toUIMessageStream({
               originalMessages: persistedHistory,
+              generateMessageId: nanoid,
               onFinish: async ({ responseMessage }: { responseMessage: MyUIMessage }) => {
                 console.info("[chat] agent:response-message", {
                   role: responseMessage.role,

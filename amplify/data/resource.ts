@@ -38,6 +38,7 @@ const schema = a.schema({
       files: a.hasMany("File", "messageId"),
       outputs: a.hasMany("GeneratedOutput", "messageId"),
     })
+    .secondaryIndexes((index) => [index("sessionId")])
     .authorization((allow) => [allow.owner()]),
   File: a
     .model({

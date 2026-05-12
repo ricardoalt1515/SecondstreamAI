@@ -14,7 +14,7 @@ export const toBedrockModelId = (runtimeModelId: string): string => {
 export const ensureServerMessageId = (message: MessageLike): MyUIMessage => {
   return {
     ...message,
-    id: message.id ?? nanoid(),
+    id: message.id || nanoid(),
   };
 };
 

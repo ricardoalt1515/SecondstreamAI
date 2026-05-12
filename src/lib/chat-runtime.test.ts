@@ -8,8 +8,8 @@ import {
 
 describe("chat-runtime", () => {
   it("convierte provider/model a model id de Bedrock", () => {
-    expect(toBedrockModelId("amazon-bedrock/anthropic.claude-sonnet-4-6-v1")).toBe(
-      "anthropic.claude-sonnet-4-6-v1",
+    expect(toBedrockModelId("amazon-bedrock/us.anthropic.claude-sonnet-4-6")).toBe(
+      "us.anthropic.claude-sonnet-4-6",
     );
   });
 
@@ -25,6 +25,16 @@ describe("chat-runtime", () => {
 
   it("genera id server-side cuando falta", () => {
     const message = ensureServerMessageId({
+      role: "assistant",
+      parts: [{ type: "text", text: "respuesta" }],
+    });
+
+    expect(message.id.length).toBeGreaterThan(0);
+  });
+
+  it("genera id server-side cuando AI SDK entrega id vacío", () => {
+    const message = ensureServerMessageId({
+      id: "",
       role: "assistant",
       parts: [{ type: "text", text: "respuesta" }],
     });

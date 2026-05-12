@@ -19,6 +19,13 @@ export async function getThreadMessages(input: z.infer<typeof getThreadMessagesS
   const chatStore = await getChatStore();
   const thread = await chatStore.getThreadById(threadId);
 
+  console.info("[chat] get-thread-messages:thread-check", {
+    threadId,
+    ownerUserId: owner.userId,
+    threadIdFromStore: thread?.id ?? null,
+    threadResourceId: thread?.resourceId ?? null,
+  });
+
   if (!thread || thread.resourceId !== owner.userId) {
     throw new Error("Thread not found");
   }

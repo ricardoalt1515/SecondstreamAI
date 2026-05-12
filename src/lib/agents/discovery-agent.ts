@@ -9,7 +9,7 @@ import { renderExecutiveReportHtml } from "@/lib/reporting/templates/executive-r
 import type { BlobStore } from "@/lib/storage/blob-store";
 import { createS3BlobStore } from "@/lib/storage/s3-blob-store";
 
-const MODEL_ID = "us.anthropic.claude-sonnet-4-6-v1";
+const MODEL_ID = "us.anthropic.claude-sonnet-4-6";
 
 let cachedReportBlobStore: BlobStore | null = null;
 

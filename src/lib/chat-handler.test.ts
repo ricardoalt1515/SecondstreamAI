@@ -1,10 +1,10 @@
 import type { ToolLoopAgent, UIMessage } from "ai";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BlobStore } from "@/lib/storage/blob-store";
 import type { ChatStore } from "@/lib/storage/chat-store";
 
 type MockStreamWriter = {
-  write: () => void;
+  write: (chunk: unknown) => void;
   merge: () => void;
 };
 
@@ -19,6 +19,7 @@ type MockAgentStreamOptions = {
 };
 
 type MockUIStreamOptions = {
+  generateMessageId?: () => string;
   onFinish?: (result: {
     responseMessage: UIMessage;
     messages?: UIMessage[];
@@ -26,6 +27,8 @@ type MockUIStreamOptions = {
     isAborted?: boolean;
   }) => Promise<void> | void;
 };
+
+const streamWrites: unknown[] = [];
 
 // Mock the ai module
 vi.mock("ai", () => ({
@@ -36,7 +39,9 @@ vi.mock("ai", () => ({
         async start(controller) {
           await execute({
             writer: {
-              write: () => undefined,
+              write: (chunk: unknown) => {
+                streamWrites.push(chunk);
+              },
               merge: () => undefined,
             },
           });
@@ -60,18 +65,18 @@ const createMockAgent = (responseText: string): ToolLoopAgent => {
     stream: vi.fn().mockImplementation(async ({ onFinish }: MockAgentStreamOptions) => {
       await onFinish?.({
         text: responseText,
-        model: "anthropic.claude-sonnet-4-6-v1",
+        model: "us.anthropic.claude-sonnet-4-6",
         finishReason: "stop",
         usage: { promptTokens: 100, completionTokens: 50 },
       });
 
       return {
-        toUIMessageStream: ({ onFinish: onUiFinish }: MockUIStreamOptions = {}) =>
+        toUIMessageStream: ({ generateMessageId, onFinish: onUiFinish }: MockUIStreamOptions = {}) =>
           new ReadableStream({
             async start(controller) {
               await onUiFinish?.({
                 responseMessage: {
-                  id: "assistant-1",
+                  id: generateMessageId?.() ?? "",
                   role: "assistant",
                   parts: [{ type: "text", text: responseText }],
                 },
@@ -101,6 +106,10 @@ const buildRequest = (payload: unknown): Request =>
 const getTestOwner = vi.fn(async () => ({ userId: "user-id", identityId: "identity-id" }));
 
 describe("api/chat handler", () => {
+  beforeEach(() => {
+    streamWrites.length = 0;
+  });
+
   it("persiste mensaje de usuario y respuesta final de asistente", async () => {
     const saveMessage = vi.fn<ChatStore["saveMessage"]>().mockResolvedValue(undefined);
     const getThreadById = vi
@@ -189,7 +198,24 @@ describe("api/chat handler", () => {
       }),
     );
     expect(saveMessage).toHaveBeenCalledTimes(2);
+    expect(saveMessage).toHaveBeenLastCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        role: "assistant",
+        id: expect.stringMatching(/^[\w-]+$/),
+      }),
+    );
     expect(generateText).toHaveBeenCalledTimes(1);
+    expect(streamWrites).toContainEqual(
+      expect.objectContaining({
+        type: "data-new-thread-created",
+        data: expect.objectContaining({
+          threadId: "thread-1",
+          title: "New Chat",
+          resourceId: "user-id",
+        }),
+      }),
+    );
   });
 
   it("en regeneración reemplaza mensaje asistente en vez de duplicar", async () => {
