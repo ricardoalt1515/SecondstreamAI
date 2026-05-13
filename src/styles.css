@@ -27,6 +27,15 @@ code {
 }
 
 :root {
+  /* Brand scale — SecondStream blue (derived from #3759A0) */
+  --brand-50: oklch(0.97 0.02 263);
+  --brand-100: oklch(0.92 0.04 263);
+  --brand-300: oklch(0.78 0.1 263);
+  --brand-400: oklch(0.62 0.14 263);
+  --brand-500: oklch(0.55 0.15 263);
+  --brand-600: oklch(0.483 0.146 263);
+  --brand-700: oklch(0.42 0.13 263);
+
   --card:
     oklch(1 0 0);
   --card-foreground:
@@ -161,6 +170,13 @@ code {
 }
 
 @theme inline {
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

@@ -18,10 +18,10 @@ function SignedInRedirect(): React.JSX.Element {
 
   return (
     <div className="flex flex-col items-center gap-4 py-4 text-center">
-      <div className="flex size-12 items-center justify-center rounded-full bg-[var(--brand-glow-soft)]">
+      <div className="flex size-12 items-center justify-center rounded-full bg-brand-600/15">
         <svg
           aria-hidden
-          className="size-5 text-[var(--brand-400)]"
+          className="size-5 text-brand-400"
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
@@ -36,7 +36,7 @@ function SignedInRedirect(): React.JSX.Element {
         <p className="text-muted-foreground text-sm">Taking you back to your workspace…</p>
       </div>
       <Button
-        className="mt-2 w-full bg-[var(--brand-600)] text-white hover:bg-[var(--brand-500)]"
+        className="mt-2 w-full bg-brand-600 text-white hover:bg-brand-500"
         type="button"
         onClick={() => router.replace("/")}
       >
@@ -53,13 +53,13 @@ export function LoginView(): React.JSX.Element {
     <section aria-labelledby={headingId} className="relative w-full max-w-md">
       <div
         aria-hidden
-        className="-inset-x-12 -top-24 pointer-events-none absolute h-72 bg-[radial-gradient(60%_60%_at_50%_0%,var(--brand-glow)_0%,transparent_70%)] blur-2xl"
+        className="-inset-x-12 -top-24 pointer-events-none absolute h-72 bg-[radial-gradient(60%_60%_at_50%_0%,var(--brand-600)_0%,transparent_70%)] opacity-35 blur-2xl"
       />
 
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-card/80 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:p-10">
         <div
           aria-hidden
-          className="-translate-x-1/2 pointer-events-none absolute top-0 left-1/2 h-px w-[60%] bg-gradient-to-r from-transparent via-[var(--brand-accent-line)] to-transparent"
+          className="-translate-x-1/2 pointer-events-none absolute top-0 left-1/2 h-px w-3/5 bg-gradient-to-r from-transparent via-brand-400/60 to-transparent"
         />
 
         <div className="flex flex-col items-center text-center">

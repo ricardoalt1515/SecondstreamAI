@@ -6,7 +6,7 @@ export default function LoginPage(): React.JSX.Element {
     <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4 py-10">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,var(--brand-glow-soft)_0%,transparent_55%),radial-gradient(ellipse_at_bottom_right,var(--brand-tint)_0%,transparent_50%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,var(--brand-600)_0%,transparent_55%),radial-gradient(ellipse_at_bottom_right,var(--brand-400)_0%,transparent_50%)] opacity-15"
       />
       <div
         aria-hidden

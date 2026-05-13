@@ -1,27 +1,17 @@
 /*
- * Amplify Authenticator theme bridge.
- * Maps Amplify UI tokens to shadcn variables so the login form inherits
- * the app theme. Scoped to [data-amplify-authenticator] to avoid leaking
- * into other parts of the app that may use Amplify components.
+ * Amplify Authenticator theme bridge — maps Amplify UI tokens to the app's
+ * shadcn variables. Scoped to [data-amplify-authenticator] so it only affects
+ * the auth form, not other Amplify components.
+ *
+ * Token sources (single source of truth):
+ *   --background / --foreground / --border / --ring / --destructive / --radius
+ *     → defined in src/styles.css under :root and .dark
+ *   --color-brand-* (50..700)
+ *     → defined in src/styles.css @theme block (Tailwind v4)
  */
 
-:root {
-  /* SecondStream brand — single source of truth (derived from #3759A0) */
-  --brand-50: oklch(0.97 0.02 263);
-  --brand-100: oklch(0.92 0.04 263);
-  --brand-300: oklch(0.78 0.1 263);
-  --brand-400: oklch(0.62 0.14 263);
-  --brand-500: oklch(0.55 0.15 263);
-  --brand-600: oklch(0.483 0.146 263);
-  --brand-700: oklch(0.42 0.13 263);
-  --brand-glow: oklch(0.483 0.146 263 / 0.35);
-  --brand-glow-soft: oklch(0.483 0.146 263 / 0.18);
-  --brand-tint: oklch(0.62 0.14 263 / 0.1);
-  --brand-accent-line: oklch(0.62 0.14 263 / 0.6);
-}
-
 [data-amplify-authenticator] {
-  /* Brand primary — mapped from app-level brand tokens */
+  /* Brand scale → Amplify's 10..100 scale */
   --amplify-colors-brand-primary-10: var(--brand-50);
   --amplify-colors-brand-primary-20: var(--brand-100);
   --amplify-colors-brand-primary-40: var(--brand-300);
@@ -30,14 +20,14 @@
   --amplify-colors-brand-primary-90: var(--brand-600);
   --amplify-colors-brand-primary-100: var(--brand-700);
 
-  /* Surfaces — fully transparent so our wrapper card shows through */
+  /* Authenticator wrapper — let our own card show through */
   --amplify-components-authenticator-router-background-color: transparent;
   --amplify-components-authenticator-router-border-style: none;
   --amplify-components-authenticator-router-border-width: 0;
   --amplify-components-authenticator-router-box-shadow: none;
   --amplify-components-authenticator-container-width-max: 100%;
 
-  /* Form fields */
+  /* Field control base */
   --amplify-components-fieldcontrol-color: var(--foreground);
   --amplify-components-fieldcontrol-background-color: var(--background);
   --amplify-components-fieldcontrol-border-color: var(--border);
@@ -48,37 +38,37 @@
   --amplify-components-fieldcontrol-error-border-color: var(--destructive);
   --amplify-components-fieldcontrol-error-color: var(--destructive);
 
-  /* Labels */
+  /*
+   * Component-specific overrides — REQUIRED. .amplify-input redefines
+   * --amplify-components-fieldcontrol-color locally to --amplify-components-input-color,
+   * which would otherwise win the cascade and revert text to Amplify's default
+   * light-theme color (invisible on dark surfaces).
+   */
+  --amplify-components-input-color: var(--foreground);
+  --amplify-components-input-border-color: var(--border);
+  --amplify-components-input-focus-border-color: var(--ring);
+  --amplify-components-passwordfield-color: var(--foreground);
+  --amplify-components-textfield-color: var(--foreground);
+
+  /* Labels and helper text */
   --amplify-components-field-label-color: var(--foreground);
   --amplify-components-text-color: var(--foreground);
 
-  /* Buttons — primary uses our brand */
-  --amplify-components-button-primary-background-color: var(--amplify-colors-brand-primary-90);
-  --amplify-components-button-primary-hover-background-color: var(
-    --amplify-colors-brand-primary-80
-  );
-  --amplify-components-button-primary-focus-background-color: var(
-    --amplify-colors-brand-primary-80
-  );
-  --amplify-components-button-primary-active-background-color: var(
-    --amplify-colors-brand-primary-100
-  );
-  --amplify-components-button-primary-color: oklch(0.985 0.001 106);
+  /* Primary button — brand */
+  --amplify-components-button-primary-background-color: var(--brand-600);
+  --amplify-components-button-primary-hover-background-color: var(--brand-500);
+  --amplify-components-button-primary-focus-background-color: var(--brand-500);
+  --amplify-components-button-primary-active-background-color: var(--brand-700);
+  --amplify-components-button-primary-color: var(--primary-foreground);
   --amplify-components-button-primary-border-radius: var(--radius);
-  --amplify-components-button-link-color: var(--amplify-colors-brand-primary-60);
-  --amplify-components-button-link-hover-color: var(--amplify-colors-brand-primary-40);
+
+  /* Link button (Forgot password, etc.) */
+  --amplify-components-button-link-color: var(--brand-400);
+  --amplify-components-button-link-hover-color: var(--brand-300);
   --amplify-components-button-link-hover-background-color: transparent;
   --amplify-components-button-link-focus-background-color: transparent;
 
-  /* Tabs (in case sign-up appears) */
-  --amplify-components-tabs-item-color: var(--muted-foreground);
-  --amplify-components-tabs-item-active-color: var(--foreground);
-  --amplify-components-tabs-item-hover-color: var(--foreground);
-  --amplify-components-tabs-item-border-color: var(--border);
-  --amplify-components-tabs-item-active-border-color: var(--amplify-colors-brand-primary-80);
-  --amplify-components-tabs-background-color: transparent;
-
-  /* Alerts (error message) */
+  /* Error alert */
   --amplify-components-alert-error-background-color: color-mix(
     in oklch,
     var(--destructive) 14%,
@@ -92,24 +82,45 @@
   --amplify-fonts-default-static: var(--font-sans);
 }
 
+/* Layout — let our wrapper handle padding and width */
 [data-amplify-authenticator] [data-amplify-form] {
   padding: 0;
 }
-
 [data-amplify-authenticator] [data-amplify-container] {
   width: 100%;
 }
-
 [data-amplify-authenticator] fieldset {
   gap: 1rem;
 }
 
-/* Password reveal button alignment */
+/* Password reveal button — match the rest of the form */
 [data-amplify-authenticator] .amplify-field__show-password {
   color: var(--muted-foreground);
 }
-
 [data-amplify-authenticator] .amplify-field__show-password:hover {
   color: var(--foreground);
   background-color: transparent;
+}
+
+/* Placeholder readability across themes */
+[data-amplify-authenticator] .amplify-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/*
+ * Browser autofill — Chrome/Safari/Edge inject their own background and text
+ * color via -webkit-autofill, ignoring `color`. We force theme colors using
+ * -webkit-text-fill-color and an inset box-shadow over the autofill bg.
+ * Works in both themes (--foreground/--background swap automatically).
+ */
+[data-amplify-authenticator] input:-webkit-autofill,
+[data-amplify-authenticator] input:-webkit-autofill:hover,
+[data-amplify-authenticator] input:-webkit-autofill:focus,
+[data-amplify-authenticator] input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--foreground);
+  -webkit-box-shadow: 0 0 0 1000px var(--background) inset;
+  box-shadow: 0 0 0 1000px var(--background) inset;
+  caret-color: var(--foreground);
+  transition: background-color 99999s ease-in-out 0s;
 }
