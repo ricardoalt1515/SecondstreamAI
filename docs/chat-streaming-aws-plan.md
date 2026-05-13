@@ -133,13 +133,38 @@ Not recommended for this fix. They would change the chat contract and introduce 
 
 Create a separate Lambda Function URL with `InvokeMode=RESPONSE_STREAM` that emits five chunks one second apart.
 
-Validate:
+Current implementation:
+
+- `amplify/functions/streaming-canary/handler.ts` — public temporary canary handler that writes five plaintext chunks one second apart.
+- `amplify/backend.ts` — custom Amplify Gen 2 CDK stack `streaming-canary` with a `NodejsFunction` and Function URL `invokeMode: RESPONSE_STREAM`.
+- CloudFormation output: `StreamingCanaryFunctionUrl`.
+
+Deploy/update sandbox or production backend:
 
 ```bash
-curl -N --no-buffer <lambda-function-url>
+nvm use
+npx ampx sandbox
 ```
 
-Pass condition: chunks arrive one by one over ~5 seconds.
+Find the emitted `StreamingCanaryFunctionUrl`, then validate:
+
+```bash
+curl -N --no-buffer <StreamingCanaryFunctionUrl>
+```
+
+Expected output shape:
+
+```text
+chunk 1 2026-05-13T00:00:00.000Z
+chunk 2 2026-05-13T00:00:01.000Z
+chunk 3 2026-05-13T00:00:02.000Z
+chunk 4 2026-05-13T00:00:03.000Z
+chunk 5 2026-05-13T00:00:04.000Z
+```
+
+Pass condition: chunks arrive one by one over ~5 seconds, not all at process end.
+
+Security note: the Function URL uses `FunctionUrlAuthType.NONE` only because this is a temporary streaming transport canary that returns non-sensitive synthetic data. Do not put chat traffic or user data behind this public canary.
 
 ### Phase 2 — Portable chat runtime assessment
 

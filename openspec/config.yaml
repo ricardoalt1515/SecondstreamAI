@@ -1,0 +1,100 @@
+project:
+  name: SecondstreamAI
+  path: /Users/ricardoaltamirano/Developer/SecondstreamAI
+  stack:
+    framework: Next.js 16 App Router
+    ui: React 19
+    language: TypeScript
+    backend: Amplify Gen 2
+    ai_sdk: AI SDK v6
+    provider: Amazon Bedrock
+    deployment: AWS-only
+  shape:
+    package_model: single-package-app
+    app_router: true
+    server_actions: true
+    chat_route: POST /api/chat
+    auth_source: Amplify Auth / Cognito
+    storage_mode: Amplify Data + Storage by default
+    fallback_modes:
+      chat_store_runtime: libsql
+      chat_blob_store_runtime: s3
+  conventions:
+    preserve_app_code: true
+    non_destructive_init: true
+    do_not_recreate_removed_tanstack_files: true
+    keep_generated_outputs_outside_app_code: true
+  docs:
+    source_of_truth:
+      - package.json
+      - biome.json
+      - AGENTS.md
+      - docs/amplify-sandbox-smoke.md
+      - src/config/amplify-runtime.ts
+      - src/config/env.ts
+      - src/lib/chat-helpers.ts
+      - src/lib/chat-handler.ts
+
+open_spec:
+  existing_changes_dir: openspec/changes
+  init_state: existing_changes_present
+  note: Openspec change history already exists; this config initializes missing project context only.
+
+strict_tdd:
+  active: true
+  evidence_required: true
+  cycle: [RED, GREEN, TRIANGULATE, REFACTOR]
+
+phase_rules:
+  init:
+    goals:
+      - inspect project stack, testing, conventions, and docs
+      - capture project context non-destructively
+      - do not modify application code
+  explore:
+    goals:
+      - map existing OpenSpec changes and repo conventions
+      - identify test runner commands and known caveats
+  proposal:
+    goals:
+      - define scope and acceptance criteria before implementation
+  spec:
+    goals:
+      - write durable behavior contracts and constraints
+  design:
+    goals:
+      - document architecture decisions and tradeoffs
+  tasks:
+    goals:
+      - split work into reviewable slices
+      - note workload and risk before apply
+  apply:
+    goals:
+      - keep writes single-threaded unless explicitly approved
+      - follow strict TDD evidence when tests exist
+  verify:
+    goals:
+      - run bun run test
+      - run bun run test <file>
+      - run bunx tsc --noEmit
+      - run bun run check
+      - note that bun run check currently has pre-existing UI lint issues
+      - for Amplify smoke use nvm use then npx ampx sandbox
+  archive:
+    goals:
+      - archive only after verification evidence is recorded
+
+test_runner:
+  primary: bun run test
+  file_scope: bun run test <file>
+  typecheck: bunx tsc --noEmit
+  lint: bun run check
+  known_issues:
+    - bun run check currently has pre-existing UI lint issues
+  amplify:
+    sandbox: nvm use then npx ampx sandbox
+    verification_gate: bun run verify:amplify-config
+    notes:
+      - use Node LTS for Amplify CLI
+      - do not use bunx ampx for sandbox
+      - AWS-only deployment path
