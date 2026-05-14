@@ -1,4 +1,5 @@
 import {
+  type AttributeValue,
   BatchWriteItemCommand,
   DeleteItemCommand,
   DynamoDBClient,
@@ -77,6 +78,9 @@ const toThread = (session: SessionItem): StoredThread => ({
 
 const appSyncOwner = (userId: string): string => `${userId}::${userId}`;
 
+const marshallItem = (value: object): Record<string, AttributeValue> =>
+  marshall(value, { removeUndefinedValues: true });
+
 const parseMessagePayload = (message: MessageItem): MyUIMessage | null => {
   const parsed =
     typeof message.payloadJson === "string"
@@ -127,7 +131,7 @@ export const createLambdaDynamoDbChatStore = ({
     const result = await client.send(
       new QueryCommand({
         ExpressionAttributeNames: { "#sessionId": "sessionId" },
-        ExpressionAttributeValues: marshall({ ":sessionId": threadId }),
+        ExpressionAttributeValues: marshallItem({ ":sessionId": threadId }),
         IndexName: messageSessionIdIndexName,
         KeyConditionExpression: "#sessionId = :sessionId",
         TableName: messageTableName,
@@ -155,7 +159,7 @@ export const createLambdaDynamoDbChatStore = ({
             const timestamp = nowIso();
             return {
               PutRequest: {
-                Item: marshall({
+                Item: marshallItem({
                   __typename: "Message",
                   createdAt: timestamp,
                   id: message.id,
@@ -178,11 +182,11 @@ export const createLambdaDynamoDbChatStore = ({
     await client.send(
       new UpdateItemCommand({
         ExpressionAttributeNames: { "#title": "title", "#updatedAt": "updatedAt" },
-        ExpressionAttributeValues: marshall({
+        ExpressionAttributeValues: marshallItem({
           ":title": (await getThreadById(threadId))?.title ?? null,
           ":updatedAt": nowIso(),
         }),
-        Key: marshall({ id: threadId }),
+        Key: marshallItem({ id: threadId }),
         TableName: sessionTableName,
         UpdateExpression: "SET #title = :title, #updatedAt = :updatedAt",
       }),
@@ -192,7 +196,7 @@ export const createLambdaDynamoDbChatStore = ({
   const getThreadById = async (threadId: string): Promise<StoredThread | null> => {
     const result = await client.send(
       new GetItemCommand({
-        Key: marshall({ id: threadId }),
+        Key: marshallItem({ id: threadId }),
         TableName: sessionTableName,
       }),
     );
@@ -218,7 +222,7 @@ export const createLambdaDynamoDbChatStore = ({
       const timestamp = nowIso();
       await client.send(
         new PutItemCommand({
-          Item: marshall({
+          Item: marshallItem({
             __typename: "Message",
             createdAt: timestamp,
             id: message.id,
@@ -249,7 +253,7 @@ export const createLambdaDynamoDbChatStore = ({
 
       await client.send(
         new PutItemCommand({
-          Item: marshall(session),
+          Item: marshallItem(session),
           TableName: sessionTableName,
         }),
       );
@@ -263,8 +267,8 @@ export const createLambdaDynamoDbChatStore = ({
       await client.send(
         new UpdateItemCommand({
           ExpressionAttributeNames: { "#title": "title", "#updatedAt": "updatedAt" },
-          ExpressionAttributeValues: marshall({ ":title": title, ":updatedAt": nowIso() }),
-          Key: marshall({ id: threadId }),
+          ExpressionAttributeValues: marshallItem({ ":title": title, ":updatedAt": nowIso() }),
+          Key: marshallItem({ id: threadId }),
           TableName: sessionTableName,
           UpdateExpression: "SET #title = :title, #updatedAt = :updatedAt",
         }),
@@ -275,7 +279,7 @@ export const createLambdaDynamoDbChatStore = ({
       const result = await client.send(
         new QueryCommand({
           ExpressionAttributeNames: { "#userId": "userId" },
-          ExpressionAttributeValues: marshall({ ":userId": userId }),
+          ExpressionAttributeValues: marshallItem({ ":userId": userId }),
           IndexName: sessionUserIdIndexName,
           KeyConditionExpression: "#userId = :userId",
           TableName: sessionTableName,
@@ -294,7 +298,7 @@ export const createLambdaDynamoDbChatStore = ({
           new BatchWriteItemCommand({
             RequestItems: {
               [messageTableName]: messages.map((message) => ({
-                DeleteRequest: { Key: marshall({ id: message.id }) },
+                DeleteRequest: { Key: marshallItem({ id: message.id }) },
               })),
             },
           }),
@@ -303,7 +307,7 @@ export const createLambdaDynamoDbChatStore = ({
 
       await client.send(
         new DeleteItemCommand({
-          Key: marshall({ id: threadId }),
+          Key: marshallItem({ id: threadId }),
           TableName: sessionTableName,
         }),
       );
@@ -330,7 +334,7 @@ export const createLambdaDynamoDbChatStore = ({
           new BatchWriteItemCommand({
             RequestItems: {
               [messageTableName]: messageRows.map((message) => ({
-                DeleteRequest: { Key: marshall({ id: message.id }) },
+                DeleteRequest: { Key: marshallItem({ id: message.id }) },
               })),
             },
           }),

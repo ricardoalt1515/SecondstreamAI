@@ -137,6 +137,20 @@ const assistantMessage = (id: string, text = id): MyUIMessage => ({
   parts: [{ type: "text", text }],
 });
 
+const assistantMessageWithUndefinedMetadata = (id: string): MyUIMessage =>
+  ({
+    id,
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      {
+        type: "text",
+        text: "assistant response",
+        providerMetadata: undefined,
+      },
+    ],
+  }) as unknown as MyUIMessage;
+
 describe("Lambda DynamoDB ChatStore", () => {
   it("creates and reads a thread with resourceId equal to the owner userId", async () => {
     const { client, store } = createStore();
@@ -197,6 +211,27 @@ describe("Lambda DynamoDB ChatStore", () => {
     await expect(store.getThreadMessages("thread-1")).resolves.toEqual([userMessage("legacy-msg")]);
   });
 
+  it("persists assistant messages with nested undefined fields as native JSON", async () => {
+    const { client, store } = createStore();
+    const message = assistantMessageWithUndefinedMetadata("assistant-with-undefined");
+    await store.createThread("thread-1", "user-1");
+
+    await store.saveMessage("thread-1", message);
+
+    expect(client.messages.get("assistant-with-undefined")?.payloadJson).toMatchObject({
+      id: "assistant-with-undefined",
+      role: "assistant",
+      parts: [{ type: "step-start" }, { type: "text", text: "assistant response" }],
+    });
+    await expect(store.getThreadMessages("thread-1")).resolves.toEqual([
+      {
+        id: "assistant-with-undefined",
+        role: "assistant",
+        parts: [{ type: "step-start" }, { type: "text", text: "assistant response" }],
+      },
+    ]);
+  });
+
   it("lists only threads for the requested user", async () => {
     const { store } = createStore();
     await store.createThread("thread-1", "user-1");
@@ -240,6 +275,31 @@ describe("Lambda DynamoDB ChatStore", () => {
     await expect(store.getThreadMessages("thread-1")).resolves.toEqual([
       userMessage("user-1"),
       assistantMessage("assistant-new"),
+    ]);
+  });
+
+  it("batch rewrites replacement assistant messages with nested undefined fields", async () => {
+    const { client, store } = createStore();
+    const replacement = assistantMessageWithUndefinedMetadata("assistant-new");
+    await store.createThread("thread-1", "user-1");
+    await store.saveMessage("thread-1", userMessage("user-1"));
+    await store.saveMessage("thread-1", assistantMessage("assistant-old"));
+    await store.saveMessage("thread-1", userMessage("user-later"));
+
+    await store.replaceAssistantMessageAfter("thread-1", "assistant-old", replacement);
+
+    expect(client.messages.get("assistant-new")?.payloadJson).toMatchObject({
+      id: "assistant-new",
+      role: "assistant",
+      parts: [{ type: "step-start" }, { type: "text", text: "assistant response" }],
+    });
+    await expect(store.getThreadMessages("thread-1")).resolves.toEqual([
+      userMessage("user-1"),
+      {
+        id: "assistant-new",
+        role: "assistant",
+        parts: [{ type: "step-start" }, { type: "text", text: "assistant response" }],
+      },
     ]);
   });
 

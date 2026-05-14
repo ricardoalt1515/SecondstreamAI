@@ -468,10 +468,10 @@ The synthetic `streaming-canary` Function URL is **retained** until real Cognito
 
 ### TDD Cycle Evidence (Safari preflight and AppSync owner metadata hotfix)
 
-| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Allow Safari/WebKit AI SDK preflight headers without wildcard origins | `amplify/backend.test.ts` | Unit/infrastructure composition | ✅ `bun run test amplify/backend.test.ts src/lib/storage/lambda-chat-store.test.ts` passed 9/9 before edits | ✅ Updated backend test failed because `accept-language` and `user-agent` were missing from `allowedHeaders` | ✅ Added the two concrete headers; focused backend/store tests passed 9/9 | ➖ Skipped: structural Function URL CORS allowlist change with one intended output | ✅ Biome formatted changed files; checks stayed green |
-| Make Lambda direct DynamoDB writes visible to AppSync owner-auth reads | `src/lib/storage/lambda-chat-store.test.ts` | Unit/storage adapter | ✅ `bun run test amplify/backend.test.ts src/lib/storage/lambda-chat-store.test.ts` passed 9/9 before edits | ✅ New metadata assertions failed for created Sessions, saved Messages, and replacement batch Messages | ✅ Added AppSync-compatible `owner`, `__typename`, and Message `updatedAt`; focused backend/store tests passed 9/9 | ✅ Covered normal `saveMessage` and `replaceAssistantMessageAfter` batch rewrite paths | ✅ Extracted `appSyncOwner(userId)` helper; Biome/checks stayed green |
+| Task                                                                   | Test File                                   | Layer                           | Safety Net                                                                                                  | RED                                                                                                          | GREEN                                                                                                              | TRIANGULATE                                                                            | REFACTOR                                                              |
+| ---------------------------------------------------------------------- | ------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Allow Safari/WebKit AI SDK preflight headers without wildcard origins  | `amplify/backend.test.ts`                   | Unit/infrastructure composition | ✅ `bun run test amplify/backend.test.ts src/lib/storage/lambda-chat-store.test.ts` passed 9/9 before edits | ✅ Updated backend test failed because `accept-language` and `user-agent` were missing from `allowedHeaders` | ✅ Added the two concrete headers; focused backend/store tests passed 9/9                                          | ➖ Skipped: structural Function URL CORS allowlist change with one intended output     | ✅ Biome formatted changed files; checks stayed green                 |
+| Make Lambda direct DynamoDB writes visible to AppSync owner-auth reads | `src/lib/storage/lambda-chat-store.test.ts` | Unit/storage adapter            | ✅ `bun run test amplify/backend.test.ts src/lib/storage/lambda-chat-store.test.ts` passed 9/9 before edits | ✅ New metadata assertions failed for created Sessions, saved Messages, and replacement batch Messages       | ✅ Added AppSync-compatible `owner`, `__typename`, and Message `updatedAt`; focused backend/store tests passed 9/9 | ✅ Covered normal `saveMessage` and `replaceAssistantMessageAfter` batch rewrite paths | ✅ Extracted `appSyncOwner(userId)` helper; Biome/checks stayed green |
 
 ### Test Commands Run (Safari preflight and owner metadata hotfix)
 
@@ -518,8 +518,8 @@ The synthetic `streaming-canary` Function URL is **retained** until real Cognito
 
 ### TDD Cycle Evidence (native JSON payload hotfix)
 
-| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+| Task                                                                               | Test File                                   | Layer                | Safety Net                                                                          | RED                                                                                                          | GREEN                                                                                                                       | TRIANGULATE                                                                                    | REFACTOR                                                                                                   |
+| ---------------------------------------------------------------------------------- | ------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Store Lambda Message `payloadJson` as native JSON while reading legacy string rows | `src/lib/storage/lambda-chat-store.test.ts` | Unit/storage adapter | ✅ `bun run test src/lib/storage/lambda-chat-store.test.ts` passed 7/7 before edits | ✅ New assertions failed because `saveMessage` and replacement batch writes stored `payloadJson` as a string | ✅ Changed Message writes to store the `MyUIMessage` object and parser to accept object or string; focused tests passed 8/8 | ✅ Covered normal `saveMessage`, replacement batch write, and legacy string read compatibility | ✅ Reused AWS SDK `marshall`/`unmarshall` in the test fake for nested JSON fidelity; Biome formatted tests |
 
 ### Test Commands Run (native JSON payload hotfix)
@@ -546,3 +546,50 @@ The synthetic `streaming-canary` Function URL is **retained** until real Cognito
 ### Workload / PR Boundary
 
 - Boundary: minimal Lambda ChatStore payload-shape compatibility hotfix only; no CORS, frontend transport, AI SDK stream protocol, AI Elements rendering, auth, blob storage, model, or Bedrock behavior changes.
+
+## Post-Deploy Fix Slice — Remove Undefined Values From Native DynamoDB Payloads
+
+### Completed Tasks
+
+- Centralized Lambda DynamoDB marshalling through `marshallItem(...)` with `removeUndefinedValues: true`.
+- Applied the helper consistently to keys, expression values, PutItem writes, BatchWrite replacement writes, and delete keys in the Lambda ChatStore adapter.
+- Added regression coverage for AI SDK assistant UI messages with nested optional `undefined` fields so assistant persistence does not fail after native JSON payload storage.
+- Preserved native JSON/map `payloadJson` storage and legacy string read compatibility.
+
+### Files Changed
+
+- `src/lib/storage/lambda-chat-store.ts` — added the central marshalling helper and routed DynamoDB serialization through it.
+- `src/lib/storage/lambda-chat-store.test.ts` — added RED/GREEN regression tests for assistant messages with nested `undefined` fields in normal save and replacement batch rewrite paths.
+- `openspec/changes/port-chat-streaming-to-lambda/apply-progress.md` — recorded this focused hotfix evidence.
+
+### TDD Cycle Evidence (undefined native payload hotfix)
+
+| Task                                                                            | Test File                                   | Layer                | Safety Net                                                                          | RED                                                                                                                                 | GREEN                                                                                              | TRIANGULATE                                                             | REFACTOR                                                                                            |
+| ------------------------------------------------------------------------------- | ------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Persist native AI SDK assistant payloads that contain nested `undefined` fields | `src/lib/storage/lambda-chat-store.test.ts` | Unit/storage adapter | ✅ `bun run test src/lib/storage/lambda-chat-store.test.ts` passed 8/8 before edits | ✅ New save-message regression failed with `Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.` | ✅ Added central `marshallItem(...)` using `removeUndefinedValues: true`; focused tests passed 9/9 | ✅ Added replacement batch rewrite coverage; focused tests passed 10/10 | ✅ Reused one marshalling helper for item/key/expression serialization; Biome found no fixes needed |
+
+### Test Commands Run (undefined native payload hotfix)
+
+- `bun run test src/lib/storage/lambda-chat-store.test.ts` — ✅ baseline 8/8 passed before edits.
+- `bun run test src/lib/storage/lambda-chat-store.test.ts` — ❌ RED: new assistant payload test failed because production `marshall()` rejected nested `undefined` fields.
+- `bun run test src/lib/storage/lambda-chat-store.test.ts` — ✅ GREEN: 9/9 passed after adding the central `marshallItem(...)` helper.
+- `bun run test src/lib/storage/lambda-chat-store.test.ts` — ✅ TRIANGULATE: 10/10 passed after adding replacement batch rewrite coverage.
+- `bunx biome check --write src/lib/storage/lambda-chat-store.ts src/lib/storage/lambda-chat-store.test.ts` — ✅ no fixes needed.
+- `bun run test src/lib/storage/lambda-chat-store.test.ts` — ✅ post-refactor focused tests passed 10/10.
+- `bunx tsc --noEmit` — ✅ passed.
+- `bun run check` — ✅ passed, 141 files checked.
+- `bun run test` — ✅ passed, 31 files / 136 tests.
+
+### Deviations From Design
+
+- None. This stays inside the direct DynamoDB ChatStore adapter selected for Lambda and preserves the AI SDK v6 UIMessage protocol and AI Elements rendering path.
+
+### Remaining Tasks
+
+- Deploy this hotfix to production.
+- Create a new production Lambda chat and confirm the assistant Message row persists, the session title updates from `New Chat`, and reload/click shows both user and assistant messages.
+- Existing failed post-`4d9fa1a` threads may need a new assistant response or manual cleanup because their assistant row was never persisted.
+
+### Workload / PR Boundary
+
+- Boundary: minimal Lambda ChatStore marshalling hotfix only; no CORS, frontend transport, AI SDK stream protocol, AI Elements rendering, auth, blob storage, model, or Bedrock behavior changes.
