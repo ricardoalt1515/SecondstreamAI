@@ -1,3 +1,7 @@
+import { isSupportedAttachmentMediaType } from "@/config/attachments";
+
+export { isSupportedAttachmentMediaType } from "@/config/attachments";
+
 export const ATTACHMENT_METADATA_VERSION = 1 as const;
 
 export type AttachmentRef = {
@@ -15,20 +19,6 @@ export type PersistedAttachmentPart = {
   filename?: string;
   url: string;
   metadata: AttachmentRef;
-};
-
-const SUPPORTED_MVP_TEXT_TYPES = new Set(["text/plain", "text/markdown"]);
-
-export const isSupportedAttachmentMediaType = (mediaType: string): boolean => {
-  if (mediaType.startsWith("image/")) {
-    return true;
-  }
-
-  if (mediaType === "application/pdf") {
-    return true;
-  }
-
-  return SUPPORTED_MVP_TEXT_TYPES.has(mediaType);
 };
 
 export const buildAttachmentRef = (input: {
@@ -84,6 +74,7 @@ export const filePartToAttachmentRef = (part: {
   if (
     candidate.version !== ATTACHMENT_METADATA_VERSION ||
     typeof candidate.mediaType !== "string" ||
+    !isSupportedAttachmentMediaType(candidate.mediaType) ||
     typeof candidate.s3Key !== "string" ||
     typeof candidate.sizeBytes !== "number" ||
     typeof candidate.url !== "string"

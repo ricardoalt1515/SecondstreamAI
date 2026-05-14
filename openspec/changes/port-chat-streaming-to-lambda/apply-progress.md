@@ -643,3 +643,72 @@ The synthetic `streaming-canary` Function URL is **retained** until real Cognito
 ### Workload / PR Boundary
 
 - Boundary: minimal Lambda ChatStore DynamoDB batch hardening only; no CORS, frontend transport, streaming adapter, auth, blob storage, AI SDK protocol, AI Elements rendering, model, or Bedrock changes.
+
+## Post-Deploy Hardening Slice — Attachment Contract and Lambda Payload Guard
+
+### Completed Tasks
+
+- Added a canonical explicit attachment policy in `src/config/attachments.ts` and re-exported it from `src/config/models.ts` for existing UI/server imports.
+- Replaced broad `text/*` / `image/*` acceptance with the Bedrock-compatible allowlist: `text/plain`, `text/markdown`, `text/csv`, `text/html`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`, and `application/pdf`.
+- Updated request validation and storage metadata validation to share the canonical MIME policy.
+- Added a conservative aggregate attachment binary-size guard for Lambda Function URL data-URL JSON transport (`MAX_ATTACHMENT_PAYLOAD_BYTES = 4 MiB`) to avoid obvious 5×4MiB request payload failures against Lambda's 6 MB synchronous request ceiling.
+- Normalized attachment store/load failures into typed `ChatRequestValidationError` responses with `x-error-code: MALFORMED_ATTACHMENT_PAYLOAD` where practical.
+- Updated UI attachment accept copy to match the explicit allowlist.
+
+### Files Changed
+
+- `src/config/attachments.ts` — new canonical MIME/limits/capability helper module.
+- `src/config/models.ts` — re-exports attachment policy and keeps model capability declarations unchanged.
+- `src/lib/chat-helpers.ts` — uses canonical MIME policy and enforces aggregate attachment payload size.
+- `src/lib/storage/attachment-metadata.ts` — uses canonical MIME policy for persisted refs.
+- `src/lib/chat-handler.ts` — maps attachment put/get failures to typed validation responses before streaming.
+- `src/components/chat-prompt-composer.tsx` — updates unsupported attachment copy for explicit MIME policy.
+- Tests updated in `src/lib/chat-helpers.test.ts`, `src/lib/storage/attachment-metadata.test.ts`, `src/lib/chat-handler.test.ts`, and `src/components/chat-prompt-composer.validation.test.ts`.
+
+### TDD Cycle Evidence (attachment contract and Lambda hardening)
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Unify MIME policy and reject unsupported Bedrock/Lambda attachment types | `src/lib/chat-helpers.test.ts`, `src/lib/storage/attachment-metadata.test.ts` | Unit/validation | ✅ Baseline passed: chat helpers 13/13, attachment metadata 5/5 | ✅ New matrix failed: `image/svg+xml` / `text/xml` were accepted and `text/csv` / `text/html` were not storage-supported | ✅ Added canonical attachment policy and wired parse/storage validation; focused tests passed | ✅ Covered allowed text/image/pdf types plus rejected zip/audio/svg/xml cases | ✅ Re-exported from `models.ts` to preserve existing imports; Biome clean |
+| Guard Lambda Function URL inline attachment payload size | `src/lib/chat-helpers.test.ts` | Unit/validation | ✅ Baseline passed 13/13 before edits | ✅ New aggregate oversized payload test failed because only per-file size was enforced | ✅ Added `MAX_ATTACHMENT_PAYLOAD_BYTES` aggregate binary-size validation; focused tests passed | ✅ Existing single-file and file-count tests continue covering distinct size/count paths | ✅ Kept constants in canonical attachment config with Lambda rationale comment |
+| Normalize attachment persistence/rehydration errors | `src/lib/chat-handler.test.ts` | Unit/handler | ✅ Baseline passed 5/5 before edits | ✅ New persisted-ref load failure test rejected with raw S3 error; new put failure test rejected with raw persistence error | ✅ Mapped blob `get`/`put` failures to typed `ChatRequestValidationError` responses; focused tests passed 7/7 | ✅ Covered both new upload persistence failure and persisted attachment rehydration failure | ✅ Kept mapping localized to attachment boundaries without changing streaming/CORS/agent behavior |
+| Align UI validation copy with explicit allowlist | `src/components/chat-prompt-composer.validation.test.ts` | Unit/UI helper | ✅ Existing validation test covered accept message | ✅ Existing assertion still expected broad `image/*`; updated expectation to explicit PNG/CSV allowlist copy | ✅ Updated copy and focused test passed 4/4 | ➖ Triangulation limited to helper copy assertion; no brittle component rendering added | ✅ Avoided broad UI refactor; accept prop consumes canonical MIME list |
+
+### Test Commands Run (attachment contract and Lambda hardening)
+
+- `bun run test src/lib/chat-helpers.test.ts` — ✅ baseline 13/13 passed before edits.
+- `bun run test src/lib/storage/attachment-metadata.test.ts` — ✅ baseline 5/5 passed before edits.
+- `bun run test src/lib/chat-handler.test.ts` — ✅ baseline 5/5 passed before edits.
+- `bun run test src/lib/chat-helpers.test.ts` — ❌ RED: unsupported SVG/XML accepted and aggregate payload guard missing.
+- `bun run test src/lib/storage/attachment-metadata.test.ts` — ❌ RED: CSV/HTML unsupported in storage and SVG accepted.
+- `bun run test src/lib/chat-handler.test.ts` — ❌ RED: attachment store/load failures surfaced as raw errors.
+- `bun run test src/lib/chat-helpers.test.ts src/lib/storage/attachment-metadata.test.ts src/lib/chat-handler.test.ts src/components/chat-prompt-composer.validation.test.ts` — ✅ focused tests passed, 31/31.
+- `bunx biome check --write src/config/models.ts src/config/attachments.ts src/lib/chat-helpers.ts src/lib/chat-helpers.test.ts src/lib/storage/attachment-metadata.ts src/lib/storage/attachment-metadata.test.ts src/lib/chat-handler.ts src/lib/chat-handler.test.ts src/components/chat-prompt-composer.tsx src/components/chat-prompt-composer.validation.test.ts` — ✅ formatted changed files.
+- `bunx tsc --noEmit` — ✅ passed.
+- `bun run check` — ✅ passed, 142 files checked.
+- `bun run test` — ✅ passed, 31 files / 144 tests.
+- `bun run verify:amplify-config` — ✅ Amplify outputs include Auth, Data, and Storage sections.
+
+### Documentation Consulted
+
+- `node_modules/ai/docs/07-reference/02-ai-sdk-ui/01-use-chat.mdx` — current `useChat`/transport request behavior.
+- `node_modules/ai/src/ui/convert-file-list-to-file-ui-parts.ts` — FileList to `FileUIPart` data URL conversion.
+- `node_modules/ai/docs/07-reference/02-ai-sdk-ui/31-convert-to-model-messages.mdx` — file part conversion and `tools` option reference.
+- `node_modules/@ai-sdk/amazon-bedrock/docs/08-amazon-bedrock.mdx` — Bedrock file-input support caveat and examples.
+- `node_modules/@ai-sdk/amazon-bedrock/src/bedrock-api-types.ts` and `convert-to-bedrock-chat-messages.ts` — concrete supported Bedrock image/document MIME types and URL-file rejection.
+- AWS Lambda Function URL / Invoke documentation was accounted for via the documented 6 MB synchronous request payload ceiling captured in code comments for the aggregate guard.
+
+### Deviations From Design
+
+- None for the assigned slice. This preserves the existing Lambda Function URL transport, AI SDK UIMessage persistence shape, Bedrock model selection, agent prompt, skills, and tools.
+
+### Remaining Tasks
+
+- Parent review and `sdd-verify` pass.
+- Commit/deploy after approval.
+- Manual or automated smoke for real attachments in production/sandbox: PNG, text/plain, Markdown, CSV, HTML, PDF with instruction, PDF without instruction rejection, reload/continue/regenerate with persisted refs.
+- Consider a later architecture slice for pre-uploading attachments before chat send if product needs larger/multiple files beyond the conservative Lambda inline payload guard.
+
+### Workload / PR Boundary
+
+- Boundary: attachment contract and Lambda inline payload hardening only; no agent prompt, skills, tools, streaming/CORS/transport endpoint, Bedrock model, auth, or storage schema changes.

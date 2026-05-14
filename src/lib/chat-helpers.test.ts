@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_REQUEST } from "@/config/models";
+import {
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_PAYLOAD_BYTES,
+  MAX_ATTACHMENTS_PER_REQUEST,
+} from "@/config/models";
 import {
   ATTACHMENT_ERROR_CODES,
   ChatRequestValidationError,
@@ -206,6 +210,64 @@ describe("parseChatRequest", () => {
     );
   });
 
+  it("rejects Bedrock-unsupported image and text subtypes explicitly", () => {
+    for (const mediaType of ["image/svg+xml", "text/xml"]) {
+      expect(() =>
+        parseChatRequest({
+          ...baseRequest,
+          modelId: "claude-sonnet-4-6",
+          messages: [
+            {
+              id: "m-1",
+              role: "user",
+              parts: [
+                {
+                  type: "file",
+                  mediaType,
+                  filename: "unsupported",
+                  url: buildDataUrl(mediaType, 128),
+                },
+              ],
+            },
+          ],
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: ATTACHMENT_ERROR_CODES.unsupportedMime,
+          statusCode: 400,
+        }),
+      );
+    }
+  });
+
+  it("rejects aggregate attachment payloads that are too large for Lambda Function URL transport", () => {
+    const oversizedPair = Array.from({ length: 2 }, (_, index) => ({
+      type: "file" as const,
+      mediaType: "text/plain",
+      filename: `large-${index}.txt`,
+      url: buildDataUrl("text/plain", Math.floor(MAX_ATTACHMENT_PAYLOAD_BYTES / 2) + 1),
+    }));
+
+    expect(() =>
+      parseChatRequest({
+        ...baseRequest,
+        modelId: "claude-sonnet-4-6",
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            parts: oversizedPair,
+          },
+        ],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: ATTACHMENT_ERROR_CODES.fileTooLarge,
+        statusCode: 400,
+      }),
+    );
+  });
+
   it("acepta adjuntos válidos dentro de límites y catálogo", () => {
     const payload = parseChatRequest({
       ...baseRequest,
@@ -233,6 +295,18 @@ describe("parseChatRequest", () => {
               mediaType: "application/pdf",
               filename: "doc.pdf",
               url: buildDataUrl("application/pdf", 1024),
+            },
+            {
+              type: "file",
+              mediaType: "text/csv",
+              filename: "data.csv",
+              url: buildDataUrl("text/csv", 64),
+            },
+            {
+              type: "file",
+              mediaType: "text/html",
+              filename: "page.html",
+              url: buildDataUrl("text/html", 64),
             },
           ],
         },

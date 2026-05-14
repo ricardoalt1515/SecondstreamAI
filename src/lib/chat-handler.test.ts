@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "@/ai/agents/agent";
+import { ATTACHMENT_ERROR_CODES } from "@/lib/chat-helpers";
 import type { BlobStore } from "@/lib/storage/blob-store";
 import type { ChatStore } from "@/lib/storage/chat-store";
 
@@ -508,6 +509,141 @@ describe("api/chat handler", () => {
           }),
         ]),
       }),
+    );
+  });
+
+  it("returns a typed attachment error when a new attachment cannot be stored", async () => {
+    const store = {
+      saveMessage: vi.fn<ChatStore["saveMessage"]>().mockResolvedValue(undefined),
+      getThreadById: vi.fn<ChatStore["getThreadById"]>().mockResolvedValue({
+        id: "thread-1",
+        resourceId: "user-id",
+        title: "Thread with file",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      createThread: vi.fn<ChatStore["createThread"]>(),
+      updateThreadTitle: vi.fn<ChatStore["updateThreadTitle"]>(),
+      getThreadMessages: vi.fn<ChatStore["getThreadMessages"]>().mockResolvedValue([]),
+      listThreads: vi.fn<ChatStore["listThreads"]>().mockResolvedValue([]),
+      deleteThread: vi.fn<ChatStore["deleteThread"]>().mockResolvedValue(undefined),
+      replaceAssistantMessageAfter: vi.fn<ChatStore["replaceAssistantMessageAfter"]>(),
+      cloneThread: vi.fn<ChatStore["cloneThread"]>(),
+    } satisfies ChatStore;
+
+    const blobStore = {
+      put: vi.fn<BlobStore["put"]>().mockRejectedValue(new Error("s3 put unavailable")),
+      get: vi.fn<BlobStore["get"]>(),
+      delete: vi.fn<BlobStore["delete"]>(),
+    } satisfies BlobStore;
+
+    const handler = createChatPostHandler({
+      chatStore: store,
+      blobStore,
+      agent: createMockAgent("should not run"),
+      generateText: vi.fn().mockResolvedValue({ text: "titulo" }),
+      getOwner: getTestOwner,
+    });
+
+    const response = await handler({
+      request: buildRequest({
+        threadId: "thread-1",
+        modelId: "claude-sonnet-4-6",
+        messages: [
+          {
+            id: "u-1",
+            role: "user",
+            parts: [
+              { type: "text", text: "read this" },
+              {
+                type: "file",
+                mediaType: "text/plain",
+                filename: "notes.txt",
+                url: "data:text/plain;base64,aGVsbG8=",
+              },
+            ],
+          } satisfies TestMessage,
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("x-error-code")).toBe(ATTACHMENT_ERROR_CODES.malformedPayload);
+    expect(store.saveMessage).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed attachment error when a persisted attachment cannot be loaded", async () => {
+    const store = {
+      saveMessage: vi.fn<ChatStore["saveMessage"]>().mockResolvedValue(undefined),
+      getThreadById: vi.fn<ChatStore["getThreadById"]>().mockResolvedValue({
+        id: "thread-1",
+        resourceId: "user-id",
+        title: "Thread with file",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      createThread: vi.fn<ChatStore["createThread"]>(),
+      updateThreadTitle: vi.fn<ChatStore["updateThreadTitle"]>(),
+      getThreadMessages: vi.fn<ChatStore["getThreadMessages"]>().mockResolvedValue([
+        {
+          id: "u-old",
+          role: "user",
+          parts: [
+            { type: "text", text: "read this" },
+            {
+              type: "file",
+              mediaType: "text/plain",
+              filename: "notes.txt",
+              url: "s3://lambda-chat/attachments/users/user-id/threads/thread-1/notes.txt",
+              metadata: {
+                version: 1,
+                mediaType: "text/plain",
+                s3Key: "lambda-chat/attachments/users/user-id/threads/thread-1/notes.txt",
+                sizeBytes: 12,
+                url: "https://bucket.s3.us-east-1.amazonaws.com/lambda-chat/attachments/users/user-id/threads/thread-1/notes.txt",
+              },
+            } as unknown as TestMessage["parts"][number],
+          ],
+        },
+      ] as never),
+      listThreads: vi.fn<ChatStore["listThreads"]>().mockResolvedValue([]),
+      deleteThread: vi.fn<ChatStore["deleteThread"]>().mockResolvedValue(undefined),
+      replaceAssistantMessageAfter: vi.fn<ChatStore["replaceAssistantMessageAfter"]>(),
+      cloneThread: vi.fn<ChatStore["cloneThread"]>(),
+    } satisfies ChatStore;
+
+    const blobStore = {
+      put: vi.fn<BlobStore["put"]>(),
+      get: vi.fn<BlobStore["get"]>().mockRejectedValue(new Error("s3 unavailable")),
+      delete: vi.fn<BlobStore["delete"]>(),
+    } satisfies BlobStore;
+
+    const handler = createChatPostHandler({
+      chatStore: store,
+      blobStore,
+      agent: createMockAgent("should not run"),
+      generateText: vi.fn().mockResolvedValue({ text: "titulo" }),
+      getOwner: getTestOwner,
+    });
+
+    const response = await handler({
+      request: buildRequest({
+        threadId: "thread-1",
+        modelId: "claude-sonnet-4-6",
+        messages: [
+          {
+            id: "u-1",
+            role: "user",
+            parts: [{ type: "text", text: "continue" }],
+          } satisfies TestMessage,
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("x-error-code")).toBe(ATTACHMENT_ERROR_CODES.malformedPayload);
+    expect(blobStore.get).toHaveBeenCalledWith(
+      "lambda-chat/attachments/users/user-id/threads/thread-1/notes.txt",
     );
   });
 

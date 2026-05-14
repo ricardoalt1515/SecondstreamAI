@@ -10,16 +10,26 @@ import {
 } from "@/lib/storage/attachment-metadata";
 
 describe("attachment-metadata", () => {
-  it("acepta tipos MVP soportados", () => {
-    expect(isSupportedAttachmentMediaType("image/png")).toBe(true);
-    expect(isSupportedAttachmentMediaType("text/plain")).toBe(true);
-    expect(isSupportedAttachmentMediaType("text/markdown")).toBe(true);
-    expect(isSupportedAttachmentMediaType("application/pdf")).toBe(true);
+  it("acepta tipos soportados por la política canónica", () => {
+    for (const mediaType of [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "text/plain",
+      "text/markdown",
+      "text/csv",
+      "text/html",
+      "application/pdf",
+    ]) {
+      expect(isSupportedAttachmentMediaType(mediaType)).toBe(true);
+    }
   });
 
-  it("rechaza tipos fuera del MVP", () => {
-    expect(isSupportedAttachmentMediaType("application/zip")).toBe(false);
-    expect(isSupportedAttachmentMediaType("audio/mpeg")).toBe(false);
+  it("rechaza tipos fuera de la política canónica", () => {
+    for (const mediaType of ["application/zip", "audio/mpeg", "image/svg+xml", "text/xml"]) {
+      expect(isSupportedAttachmentMediaType(mediaType)).toBe(false);
+    }
   });
 
   it("serializa metadata de adjunto con versión", () => {

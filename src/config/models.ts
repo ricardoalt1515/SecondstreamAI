@@ -1,15 +1,22 @@
 import type { ModelSelectorLogoProps } from "@/components/ai-elements/model-selector";
 
+export {
+  type AttachmentCapability,
+  getAttachmentCapability,
+  isSupportedAttachmentMediaType,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_PAYLOAD_BYTES,
+  MAX_ATTACHMENTS_PER_REQUEST,
+  SUPPORTED_ATTACHMENT_MEDIA_TYPES,
+  SUPPORTED_ATTACHMENT_MIME_PATTERNS,
+  type SupportedAttachmentMediaType,
+} from "@/config/attachments";
+
+import type { AttachmentCapability } from "@/config/attachments";
+
 type ProviderSlug = ModelSelectorLogoProps["provider"];
 
-export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
-export const MAX_ATTACHMENTS_PER_REQUEST = 5;
-
-export const SUPPORTED_ATTACHMENT_MIME_PATTERNS = ["text/*", "image/*", "application/pdf"] as const;
-
 export const MODEL_GROUPS = ["Amazon"] as const;
-
-export type AttachmentCapability = "text" | "image" | "pdf";
 
 export type ModelOption = {
   chef: (typeof MODEL_GROUPS)[number];
@@ -56,18 +63,4 @@ export const getRuntimeModelIdentifier = (modelId: string): string | null => {
   return `${model.provider}/${model.runtimeModelId}`;
 };
 
-export const normalizeAttachmentCapability = (mediaType: string): AttachmentCapability | null => {
-  if (mediaType.startsWith("text/")) {
-    return "text";
-  }
-
-  if (mediaType.startsWith("image/")) {
-    return "image";
-  }
-
-  if (mediaType === "application/pdf") {
-    return "pdf";
-  }
-
-  return null;
-};
+export { getAttachmentCapability as normalizeAttachmentCapability } from "@/config/attachments";

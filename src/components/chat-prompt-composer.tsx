@@ -48,7 +48,7 @@ export const getAttachmentValidationMessage = (code: PromptInputErrorCode): stri
     case "max_files":
       return `You can attach up to ${MAX_ATTACHMENTS_PER_REQUEST} files per message.`;
     case "accept":
-      return "Unsupported file type. Use image/*, application/pdf, or text/*.";
+      return "Unsupported file type. Use PNG, JPEG, GIF, WebP, PDF, plain text, Markdown, CSV, or HTML.";
     case "read_failed":
       return "We couldn't read one or more files. Remove them and try again.";
     default:

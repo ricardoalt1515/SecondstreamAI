@@ -7,7 +7,8 @@ describe("getAttachmentValidationMessage", () => {
   });
 
   it("returns an explicit invalid type message", () => {
-    expect(getAttachmentValidationMessage("accept")).toContain("image/*");
+    expect(getAttachmentValidationMessage("accept")).toContain("PNG");
+    expect(getAttachmentValidationMessage("accept")).toContain("CSV");
   });
 
   it("returns an explicit max files message", () => {

@@ -3,6 +3,7 @@ import {
   DEFAULT_RUNTIME_MODEL_ID,
   getRuntimeModelIdentifier,
   MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_PAYLOAD_BYTES,
   MAX_ATTACHMENTS_PER_REQUEST,
   MODEL_BY_ID,
   MODEL_ID_SET,
@@ -142,12 +143,14 @@ export function parseChatRequest(params: unknown): ChatRequest {
     }
   }
 
+  let aggregateAttachmentBytes = 0;
+
   for (const filePart of fileParts) {
     const capability = normalizeAttachmentCapability(filePart.mediaType);
     if (!capability) {
       throw new ChatRequestValidationError(
         ATTACHMENT_ERROR_CODES.unsupportedMime,
-        `Unsupported file type: ${filePart.mediaType}. Use text/*, image/*, or application/pdf.`,
+        `Unsupported file type: ${filePart.mediaType}. Use text/plain, text/markdown, text/csv, text/html, image/png, image/jpeg, image/gif, image/webp, or application/pdf.`,
       );
     }
 
@@ -167,6 +170,10 @@ export function parseChatRequest(params: unknown): ChatRequest {
         typeof (metadata as { s3Key?: unknown }).s3Key === "string" &&
         typeof (metadata as { sizeBytes?: unknown }).sizeBytes === "number";
 
+      if (isPersistedRef) {
+        aggregateAttachmentBytes += (metadata as { sizeBytes: number }).sizeBytes;
+      }
+
       if (!isPersistedRef) {
         throw new ChatRequestValidationError(
           ATTACHMENT_ERROR_CODES.malformedPayload,
@@ -180,12 +187,20 @@ export function parseChatRequest(params: unknown): ChatRequest {
     const [, payload = ""] = filePart.url.split(",", 2);
     const normalizedPayload = payload.replace(/\s/g, "");
     const binarySize = Math.floor((normalizedPayload.length * 3) / 4);
+    aggregateAttachmentBytes += binarySize;
     if (binarySize > MAX_ATTACHMENT_BYTES) {
       throw new ChatRequestValidationError(
         ATTACHMENT_ERROR_CODES.fileTooLarge,
         `File is too large. Each attachment must be 4 MB or smaller (${MAX_ATTACHMENT_BYTES} bytes).`,
       );
     }
+  }
+
+  if (aggregateAttachmentBytes > MAX_ATTACHMENT_PAYLOAD_BYTES) {
+    throw new ChatRequestValidationError(
+      ATTACHMENT_ERROR_CODES.fileTooLarge,
+      `Attachments are too large for Lambda chat transport. Total attachment payload must be ${MAX_ATTACHMENT_PAYLOAD_BYTES} bytes or smaller.`,
+    );
   }
 
   return {

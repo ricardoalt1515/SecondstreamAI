@@ -100,12 +100,19 @@ const withAttachmentPersistence = async (
 
     if (part.url.startsWith("data:")) {
       const bytes = decodeDataUrl(part.url);
-      const saved = await params.blobStore.put({
-        bytes,
-        filename: part.filename ?? "attachment",
-        mediaType: part.mediaType,
-        threadId: params.threadId,
-      });
+      const saved = await params.blobStore
+        .put({
+          bytes,
+          filename: part.filename ?? "attachment",
+          mediaType: part.mediaType,
+          threadId: params.threadId,
+        })
+        .catch(() => {
+          throw new ChatRequestValidationError(
+            ATTACHMENT_ERROR_CODES.malformedPayload,
+            "We couldn't store an attachment. Remove it and try again.",
+          );
+        });
 
       const metadata = buildAttachmentRef({
         filename: part.filename,
@@ -181,7 +188,12 @@ const withBedrockAttachmentData = async (
         continue;
       }
 
-      const bytes = await blobStore.get(metadata.s3Key);
+      const bytes = await blobStore.get(metadata.s3Key).catch(() => {
+        throw new ChatRequestValidationError(
+          ATTACHMENT_ERROR_CODES.malformedPayload,
+          "We couldn't load an attachment. Remove it and try again.",
+        );
+      });
       parts.push({
         type: "file",
         mediaType: metadata.mediaType,
@@ -269,19 +281,46 @@ export const createChatPostHandler = (deps: Dependencies) => {
         });
       }
 
-      const persistedUserMessage = await withAttachmentPersistence(
-        ensureServerMessageId(userMessage),
-        {
+      let persistedUserMessage: MyUIMessage;
+      try {
+        persistedUserMessage = await withAttachmentPersistence(ensureServerMessageId(userMessage), {
           threadId: params.threadId,
           blobStore: deps.blobStore,
-        },
-      );
+        });
+      } catch (error) {
+        if (error instanceof ChatRequestValidationError) {
+          return new Response(error.message, {
+            status: error.statusCode,
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "x-error-code": error.code,
+            },
+          });
+        }
+
+        throw error;
+      }
 
       await deps.chatStore.saveMessage(params.threadId, persistedUserMessage);
       persistedHistory = [...persistedHistory, persistedUserMessage];
     }
 
-    const historyForModel = await withBedrockAttachmentData(persistedHistory, deps.blobStore);
+    let historyForModel: MyUIMessage[];
+    try {
+      historyForModel = await withBedrockAttachmentData(persistedHistory, deps.blobStore);
+    } catch (error) {
+      if (error instanceof ChatRequestValidationError) {
+        return new Response(error.message, {
+          status: error.statusCode,
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "x-error-code": error.code,
+          },
+        });
+      }
+
+      throw error;
+    }
 
     const uiMessages = historyForModel.map(({ id: _id, ...rest }) => rest);
     const modelMessages = await convertToModelMessages(uiMessages);
