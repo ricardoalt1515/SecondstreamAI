@@ -15,9 +15,7 @@ export const createLoadSkillTool = (baseDir: string = DEFAULT_SKILLS_DIR) =>
     description:
       "Load specialized skill instructions from a markdown file under src/ai/skills/<name>/SKILL.md.",
     inputSchema: z.object({
-      name: z
-        .string()
-        .describe("The exact skill name to load (matches the skill directory name)."),
+      name: z.string().describe("The exact skill name to load (matches the skill directory name)."),
     }),
     execute: async ({ name }) => {
       try {

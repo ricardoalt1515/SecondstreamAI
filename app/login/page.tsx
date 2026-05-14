@@ -3,6 +3,7 @@ import { LoginView } from "./login-view";
 
 export default function LoginPage(): React.JSX.Element {
   return (
+    // biome-ignore lint/correctness/useUniqueElementIds: Root layout skip link targets this stable page landmark.
     <main
       id="main-content"
       className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4 py-10"
