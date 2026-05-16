@@ -7,6 +7,22 @@ import type { WorkingMemory } from "@/config/working-memory";
 //   (`input-streaming` | `input-available` | `output-available` | `output-error`).
 // This file mirrors that contract so UI rendering remains type-safe.
 
+type ArtifactKind = "field-brief" | "playbook" | "analytical-read" | "proposal-shell";
+
+export type ArtifactToolUIResult = {
+  artifactId: string;
+  artifactType: ArtifactKind;
+  title: string;
+  status: "ready";
+  createdAt: string;
+  formats: Array<{
+    format: "pdf";
+    mediaType: "application/pdf";
+    filename: string;
+    downloadUrl: string;
+  }>;
+};
+
 export type MyUIMessage = UIMessage<
   unknown,
   {
@@ -34,6 +50,22 @@ export type MyUIMessage = UIMessage<
     updateWorkingMemory: {
       input: { memory: WorkingMemory };
       output: { success: boolean };
+    };
+    generateFieldBrief: {
+      input: unknown;
+      output: ArtifactToolUIResult;
+    };
+    generatePlaybook: {
+      input: unknown;
+      output: ArtifactToolUIResult;
+    };
+    generateAnalyticalRead: {
+      input: unknown;
+      output: ArtifactToolUIResult;
+    };
+    generateProposalShell: {
+      input: unknown;
+      output: ArtifactToolUIResult;
     };
   }
 >;

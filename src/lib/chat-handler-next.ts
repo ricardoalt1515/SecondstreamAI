@@ -1,6 +1,7 @@
 import { generateText } from "ai";
-import { agent } from "@/ai/agents/agent";
+import { createAgent } from "@/ai/agents/agent";
 import { getEnv } from "@/config/env";
+import { createAmplifyArtifactStore } from "@/lib/artifacts/amplify-artifact-store";
 import { getCurrentOwner } from "@/lib/auth/server";
 import { createChatPostHandler } from "@/lib/chat-handler";
 import { createS3BlobStore } from "@/lib/storage/s3-blob-store";
@@ -29,7 +30,8 @@ const getDefaultHandler = async (): Promise<ReturnType<typeof createChatPostHand
   cachedHandler = createChatPostHandler({
     chatStore,
     blobStore,
-    agent,
+    artifactStore: createAmplifyArtifactStore(),
+    createAgent,
     generateText,
     getOwner: getCurrentOwner,
   });

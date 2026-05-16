@@ -10,7 +10,13 @@ const createLambdaDynamoDbChatStoreFromEnvMock = vi.hoisted(() =>
   vi.fn(() => ({ kind: "chat-store" })),
 );
 const createLambdaS3BlobStoreFromEnvMock = vi.hoisted(() => vi.fn(() => ({ kind: "blob-store" })));
-const agentMock = vi.hoisted(() => ({ stream: vi.fn() }));
+const createLambdaDynamoDbArtifactStoreFromEnvMock = vi.hoisted(() =>
+  vi.fn(() => ({ kind: "artifact-store" })),
+);
+const createS3ArtifactPdfStorageFromEnvMock = vi.hoisted(() =>
+  vi.fn(() => ({ kind: "pdf-storage" })),
+);
+const createAgentMock = vi.hoisted(() => vi.fn(() => ({ stream: vi.fn() })));
 const generateTextMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/chat-handler", () => ({ createChatPostHandler: createChatPostHandlerMock }));
@@ -28,7 +34,13 @@ vi.mock("@/lib/storage/lambda-chat-store", () => ({
 vi.mock("@/lib/storage/lambda-blob-store", () => ({
   createLambdaS3BlobStoreFromEnv: createLambdaS3BlobStoreFromEnvMock,
 }));
-vi.mock("@/ai/agents/agent", () => ({ agent: agentMock }));
+vi.mock("@/lib/artifacts/lambda-artifact-store", () => ({
+  createLambdaDynamoDbArtifactStoreFromEnv: createLambdaDynamoDbArtifactStoreFromEnvMock,
+}));
+vi.mock("@/lib/artifacts/pdf-storage", () => ({
+  createS3ArtifactPdfStorageFromEnv: createS3ArtifactPdfStorageFromEnvMock,
+}));
+vi.mock("@/ai/agents/agent", () => ({ createAgent: createAgentMock }));
 vi.mock("ai", () => ({ generateText: generateTextMock }));
 
 type TestResponseStream = LambdaResponseStream & {
@@ -118,9 +130,13 @@ describe("chat streaming Lambda handler composition", () => {
       userId: "user-1",
       identityId: "user-1",
     });
+    expect(createLambdaDynamoDbArtifactStoreFromEnvMock).toHaveBeenCalled();
+    expect(createS3ArtifactPdfStorageFromEnvMock).toHaveBeenCalled();
     expect(createChatPostHandlerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        agent: agentMock,
+        artifactStore: { kind: "artifact-store" },
+        pdfStorage: { kind: "pdf-storage" },
+        createAgent: createAgentMock,
         generateText: generateTextMock,
         chatStore: { kind: "chat-store" },
         blobStore: { kind: "blob-store" },

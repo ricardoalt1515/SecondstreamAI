@@ -5,7 +5,7 @@ import { cloneThread, type Thread } from "@app/actions/threads";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, type PrepareSendMessagesRequest } from "ai";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { GitBranchIcon, GlobeIcon, RefreshCcwIcon } from "lucide-react";
+import { DownloadIcon, FileTextIcon, GitBranchIcon, GlobeIcon, RefreshCcwIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -28,11 +28,12 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-e
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Source, SourceContent, SourceTrigger } from "@/components/ai-elements/sources";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
 import { WorkingMemoryUpdate } from "@/components/ai-elements/working-memory-update";
 import { ChatPromptComposer } from "@/components/chat-prompt-composer";
 import { useDraftInput } from "@/hooks/use-draft-input";
 import { canSubmitPromptMessage, shouldShowLoadingShimmer } from "@/lib/chat-utils";
-import type { MyUIMessage } from "@/types/ui-message";
+import type { ArtifactToolUIResult, MyUIMessage } from "@/types/ui-message";
 import { CopyButton } from "./copy-button";
 
 const EMPTY_STATE_SUGGESTIONS = [
@@ -41,12 +42,59 @@ const EMPTY_STATE_SUGGESTIONS = [
   "Draft a maintenance procedure",
 ] as const;
 
+const ARTIFACT_TOOL_TITLES = {
+  "tool-generateFieldBrief": "Field Brief",
+  "tool-generatePlaybook": "Conversation Playbook",
+  "tool-generateAnalyticalRead": "Analytical Read",
+  "tool-generateProposalShell": "Proposal Shell",
+} as const;
+
+type ArtifactToolType = keyof typeof ARTIFACT_TOOL_TITLES;
+
+type ArtifactToolPart = Extract<MyUIMessage["parts"][number], { type: ArtifactToolType }>;
+
+const isArtifactToolPart = (part: MyUIMessage["parts"][number]): part is ArtifactToolPart =>
+  part.type in ARTIFACT_TOOL_TITLES;
+
+export function ArtifactDownloadCard({
+  title,
+  output,
+}: {
+  title: string;
+  output: ArtifactToolUIResult | null | undefined;
+}): React.JSX.Element {
+  const pdf = output?.formats?.[0];
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border bg-card p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <FileTextIcon className="size-5 shrink-0 text-primary" />
+        <div className="min-w-0">
+          <p className="truncate font-medium text-sm">{output?.title ?? title}</p>
+          <p className="truncate text-muted-foreground text-xs">{pdf?.filename ?? "PDF ready"}</p>
+        </div>
+      </div>
+      {pdf?.downloadUrl ? (
+        <a
+          className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-primary text-xs hover:bg-primary/15"
+          href={pdf.downloadUrl}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <DownloadIcon className="size-3.5" />
+          Download PDF
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 type ChatSendRequestInput = Pick<
   Parameters<PrepareSendMessagesRequest<MyUIMessage>>[0],
   "body" | "messageId" | "messages" | "trigger"
 >;
 
-const CHAT_LAMBDA_URL = "https://ywyhxx4rlpppfkmqvnrh7ujlia0ydkxp.lambda-url.us-east-1.on.aws/";
+const CHAT_LAMBDA_URL = "https://i2bquluu4ttmvzpuxva665dlye0tnunw.lambda-url.us-east-1.on.aws/";
 
 type PreparedChatRequest = {
   body: object;
@@ -99,6 +147,28 @@ export function ChatRuntimeError({ message }: { message: string }): React.JSX.El
   );
 }
 
+function isNewThreadCreatedData(data: unknown): data is MyUIMessage["metadata"] & {
+  threadId: string;
+  title: string;
+  resourceId: string;
+  createdAt: string;
+  updatedAt: string;
+} {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "threadId" in data &&
+    "title" in data &&
+    "resourceId" in data &&
+    "createdAt" in data &&
+    "updatedAt" in data
+  );
+}
+
+function isConversationTitleData(data: unknown): data is { title: string } {
+  return typeof data === "object" && data !== null && "title" in data;
+}
+
 export function ChatInterface({
   initialMessages = [],
   threadId,
@@ -125,32 +195,31 @@ export function ChatInterface({
       queryClient.invalidateQueries({ queryKey: ["threads"] });
     },
     onData: (dataPart) => {
-      if (dataPart.type === "data-new-thread-created") {
-        const newThreadId = dataPart.data.threadId;
-        window.history.replaceState(window.history.state, "", `/c/${newThreadId}`);
+      if (dataPart.type === "data-new-thread-created" && isNewThreadCreatedData(dataPart.data)) {
+        const newThread = dataPart.data;
+        window.history.replaceState(window.history.state, "", `/c/${newThread.threadId}`);
         queryClient.setQueryData<{ threads: Thread[] }>(["threads"], (old) => {
-          const newThread: Thread = {
-            id: newThreadId,
-            title: dataPart.data.title,
-            resourceId: dataPart.data.resourceId,
-            createdAt: dataPart.data.createdAt,
-            updatedAt: dataPart.data.updatedAt,
+          const thread: Thread = {
+            id: newThread.threadId,
+            title: newThread.title,
+            resourceId: newThread.resourceId,
+            createdAt: newThread.createdAt,
+            updatedAt: newThread.updatedAt,
           };
-          if (!old) return { threads: [newThread] };
-          if (old.threads.some((thread) => thread.id === newThread.id)) {
+          if (!old) return { threads: [thread] };
+          if (old.threads.some((existingThread) => existingThread.id === thread.id)) {
             return old;
           }
-          return { threads: [newThread, ...old.threads] };
+          return { threads: [thread, ...old.threads] };
         });
         queryClient.invalidateQueries({ queryKey: ["threads"] });
       }
-      if (dataPart.type === "data-conversation-title") {
+      if (dataPart.type === "data-conversation-title" && isConversationTitleData(dataPart.data)) {
+        const title = dataPart.data.title;
         queryClient.setQueryData<{ threads: Thread[] }>(["threads"], (old) => {
           if (!old) return old;
           return {
-            threads: old.threads.map((t) =>
-              t.id === threadId ? { ...t, title: dataPart.data.title } : t,
-            ),
+            threads: old.threads.map((t) => (t.id === threadId ? { ...t, title } : t)),
           };
         });
       }
@@ -356,8 +425,37 @@ export function ChatInterface({
                                     }
                                   />
                                 );
-                              default:
-                                return null;
+                              default: {
+                                if (!isArtifactToolPart(part)) {
+                                  return null;
+                                }
+                                const artifactTitle = ARTIFACT_TOOL_TITLES[part.type];
+                                return (
+                                  <Tool key={`${message.id}-${i}`} defaultOpen={false}>
+                                    <ToolHeader
+                                      state={part.state}
+                                      title={artifactTitle}
+                                      type={part.type}
+                                    />
+                                    <ToolContent>
+                                      {part.state === "output-available" ? (
+                                        <ArtifactDownloadCard
+                                          output={part.output}
+                                          title={artifactTitle}
+                                        />
+                                      ) : null}
+                                      {part.state !== "input-streaming" ? (
+                                        <ToolInput input={part.input} />
+                                      ) : null}
+                                      {part.state === "output-error" ? (
+                                        <p className="text-destructive text-sm">
+                                          {part.errorText ?? "Generation failed."}
+                                        </p>
+                                      ) : null}
+                                    </ToolContent>
+                                  </Tool>
+                                );
+                              }
                             }
                           })}
                         </MessageContent>

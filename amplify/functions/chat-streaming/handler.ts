@@ -1,5 +1,7 @@
 import { generateText } from "ai";
-import { agent } from "@/ai/agents/agent";
+import { createAgent } from "@/ai/agents/agent";
+import { createLambdaDynamoDbArtifactStoreFromEnv } from "@/lib/artifacts/lambda-artifact-store";
+import { createS3ArtifactPdfStorageFromEnv } from "@/lib/artifacts/pdf-storage";
 import { isAuthRequiredError } from "@/lib/auth/errors";
 import {
   createCognitoAccessTokenVerifier,
@@ -56,13 +58,15 @@ const requiredEnv = (name: string): string => {
   return value;
 };
 
+const toHeaderSafe = (value: string): string => value.replace(/[^\x20-\x7E]/g, "?").slice(0, 256);
+
 const configurationErrorResponse = (error: unknown): Response =>
   new Response("Lambda chat is not configured.", {
     status: 500,
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "x-error-code": "CHAT_LAMBDA_CONFIGURATION_INVALID",
-      "x-error-detail": error instanceof Error ? error.message : "unknown",
+      "x-error-detail": toHeaderSafe(error instanceof Error ? error.message : "unknown"),
     },
   });
 
@@ -151,10 +155,14 @@ export const handleChatStreamingRequest = async (
 
     const chatStore = createLambdaDynamoDbChatStoreFromEnv();
     const blobStore = createLambdaS3BlobStoreFromEnv(process.env as Record<string, string>, owner);
+    const artifactStore = createLambdaDynamoDbArtifactStoreFromEnv();
+    const pdfStorage = createS3ArtifactPdfStorageFromEnv();
     const handler = createChatPostHandler({
       chatStore,
       blobStore,
-      agent,
+      artifactStore,
+      pdfStorage,
+      createAgent,
       generateText,
       getOwner: async () => owner,
     });

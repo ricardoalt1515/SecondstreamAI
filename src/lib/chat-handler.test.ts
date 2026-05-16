@@ -59,6 +59,12 @@ vi.mock("ai", () => ({
   ),
   generateText: vi.fn(),
   validateUIMessages: vi.fn(async ({ messages }: { messages: unknown[] }) => messages),
+  // chat-handler now imports H2O_AGENT_INSTRUCTIONS from agent.ts as a value,
+  // forcing the agent module (and its module-level `tool(...)` and
+  // `new ToolLoopAgent(...)` calls) to evaluate during this test file.
+  tool: vi.fn((config: unknown) => config),
+  stepCountIs: vi.fn((count: number) => ({ __stopAt: count })),
+  ToolLoopAgent: vi.fn(() => ({})),
 }));
 
 // Create a mock agent factory
@@ -194,12 +200,25 @@ describe("api/chat handler", () => {
     expect(response.status).toBe(200);
     expect(mockAgent.stream).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: [
+        messages: expect.arrayContaining([
           expect.objectContaining({
             role: "user",
             parts: [{ type: "text", text: "hola" }],
           }),
-        ],
+        ]),
+        timeout: expect.objectContaining({ totalMs: 120_000 }),
+      }),
+    );
+    // The first message must be a system message with Bedrock cachePoint so
+    // the H2O instructions hit Anthropic's prompt cache. Sonnet 4.6 supports
+    // 1-hour TTL.
+    const streamArgs = (mockAgent.stream as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(streamArgs.messages[0]).toEqual(
+      expect.objectContaining({
+        role: "system",
+        providerOptions: {
+          bedrock: { cachePoint: { type: "default", ttl: "1h" } },
+        },
       }),
     );
     expect(saveMessage).toHaveBeenCalledTimes(2);

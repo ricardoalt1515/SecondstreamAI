@@ -44,6 +44,7 @@ const chatStreamingAllowedOrigins = [
 const chatStreamingStack = backend.createStack("chat-streaming");
 const sessionTable = backend.data.resources.tables.Session;
 const messageTable = backend.data.resources.tables.Message;
+const artifactTable = backend.data.resources.tables.Artifact;
 const blobBucket = backend.storage.resources.bucket;
 
 const chatStreamingFunction = new NodejsFunction(chatStreamingStack, "ChatStreamingFunction", {
@@ -51,12 +52,20 @@ const chatStreamingFunction = new NodejsFunction(chatStreamingStack, "ChatStream
   bundling: {
     banner:
       "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+    commandHooks: {
+      afterBundling: () => [],
+      beforeBundling: (inputDir: string, outputDir: string) => [
+        `mkdir -p ${outputDir}/src/ai && cp -R ${inputDir}/src/ai/skills ${outputDir}/src/ai/skills`,
+      ],
+      beforeInstall: () => [],
+    },
     format: OutputFormat.ESM,
   },
   environment: {
     CHAT_STREAM_ALLOWED_ORIGINS: chatStreamingAllowedOrigins.join(","),
     COGNITO_USER_POOL_CLIENT_ID: backend.auth.resources.userPoolClient.userPoolClientId,
     COGNITO_USER_POOL_ID: backend.auth.resources.userPool.userPoolId,
+    LAMBDA_CHAT_ARTIFACT_TABLE_NAME: artifactTable.tableName,
     LAMBDA_CHAT_BLOB_BUCKET_NAME: blobBucket.bucketName,
     LAMBDA_CHAT_BLOB_PREFIX: "lambda-chat/attachments/",
     LAMBDA_CHAT_MESSAGE_SESSION_ID_INDEX_NAME: "messagesBySessionId",
@@ -64,8 +73,9 @@ const chatStreamingFunction = new NodejsFunction(chatStreamingStack, "ChatStream
     LAMBDA_CHAT_SESSION_TABLE_NAME: sessionTable.tableName,
     LAMBDA_CHAT_SESSION_USER_ID_INDEX_NAME: "gsi-User.sessions",
   },
+  memorySize: 1024,
   runtime: Runtime.NODEJS_22_X,
-  timeout: Duration.seconds(60),
+  timeout: Duration.minutes(5),
 });
 
 chatStreamingFunction.addToRolePolicy(
@@ -83,6 +93,7 @@ chatStreamingFunction.addToRolePolicy(
       `${sessionTable.tableArn}/index/*`,
       messageTable.tableArn,
       `${messageTable.tableArn}/index/*`,
+      artifactTable.tableArn,
     ],
   }),
 );
