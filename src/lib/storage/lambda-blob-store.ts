@@ -9,6 +9,12 @@ import {
 import { buildS3ObjectUrl } from "@/config/env";
 import type { OwnerContext } from "@/lib/auth/owner-context";
 import type { BlobStore, PutBlobInput, PutBlobResult } from "@/lib/storage/blob-store";
+import {
+  bodyToBuffer,
+  normalizePrefix,
+  requiredEnv as requiredEnvShared,
+  sanitizePathSegment,
+} from "@/lib/storage/s3-utils";
 
 export type LambdaS3Client = Pick<S3Client, "send">;
 
@@ -27,50 +33,12 @@ export type LambdaS3BlobStoreEnv = {
   LAMBDA_CHAT_BLOB_PREFIX?: string;
 };
 
-type TransformableS3Body = { transformToByteArray(): Promise<Uint8Array> };
-
-const normalizePrefix = (prefix: string): string =>
-  prefix
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .map((segment) => sanitizePathSegment(segment))
-    .join("/");
-
-const sanitizePathSegment = (value: string): string => value.replace(/[^a-zA-Z0-9._-]/g, "-");
-
-const requiredEnv = (env: LambdaS3BlobStoreEnv, name: keyof LambdaS3BlobStoreEnv): string => {
-  const value = env[name];
-  if (!value) {
-    throw new Error(`Missing required Lambda BlobStore environment variable: ${name}`);
-  }
-  return value;
-};
-
-const bodyToBuffer = async (body: unknown): Promise<Buffer> => {
-  if (!body) {
-    return Buffer.alloc(0);
-  }
-
-  if (Buffer.isBuffer(body)) {
-    return Buffer.from(body);
-  }
-
-  if (body instanceof Uint8Array) {
-    return Buffer.from(body);
-  }
-
-  if (
-    typeof body === "object" &&
-    body !== null &&
-    "transformToByteArray" in body &&
-    typeof (body as TransformableS3Body).transformToByteArray === "function"
-  ) {
-    return Buffer.from(await (body as TransformableS3Body).transformToByteArray());
-  }
-
-  throw new Error("Unsupported S3 object body type.");
-};
+const requiredEnv = (env: LambdaS3BlobStoreEnv, name: keyof LambdaS3BlobStoreEnv): string =>
+  requiredEnvShared(
+    env as Record<string, string | undefined>,
+    name,
+    "Lambda BlobStore environment",
+  );
 
 export const createLambdaS3ObjectKey = ({
   filename,

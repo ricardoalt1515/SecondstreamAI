@@ -29,6 +29,7 @@ const defineBackendMock = vi.hoisted(() =>
         tables: {
           Session: { tableArn: "arn:session", tableName: "SessionTable" },
           Message: { tableArn: "arn:message", tableName: "MessageTable" },
+          Artifact: { tableArn: "arn:artifact", tableName: "ArtifactTable" },
         },
       },
     },
@@ -62,6 +63,7 @@ vi.mock("aws-cdk-lib", () => ({
   CfnOutput: cfnOutputMock,
   Duration: {
     seconds: vi.fn((seconds: number) => ({ seconds })),
+    minutes: vi.fn((minutes: number) => ({ minutes })),
   },
 }));
 
@@ -123,22 +125,48 @@ describe("Amplify backend", () => {
       { stackName: "chat-streaming" },
       "ChatStreamingFunction",
       expect.objectContaining({
-        bundling: {
+        bundling: expect.objectContaining({
           banner:
             "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+          commandHooks: expect.objectContaining({
+            afterBundling: expect.any(Function),
+            beforeBundling: expect.any(Function),
+            beforeInstall: expect.any(Function),
+          }),
           format: "esm",
-        },
+        }),
         environment: expect.objectContaining({
           COGNITO_USER_POOL_ID: "UserPoolId",
           COGNITO_USER_POOL_CLIENT_ID: "UserPoolClientId",
           LAMBDA_CHAT_SESSION_TABLE_NAME: "SessionTable",
           LAMBDA_CHAT_MESSAGE_TABLE_NAME: "MessageTable",
+          LAMBDA_CHAT_ARTIFACT_TABLE_NAME: "ArtifactTable",
           LAMBDA_CHAT_BLOB_BUCKET_NAME: "BucketName",
         }),
+        memorySize: 1024,
         runtime: "NODEJS_22_X",
-        timeout: { seconds: 60 },
+        timeout: { minutes: 5 },
       }),
     );
+    type ChatFunctionConfig = {
+      bundling?: {
+        commandHooks?: {
+          beforeBundling?: (inputDir: string, outputDir: string) => string[];
+        };
+      };
+    };
+    const chatFunctionCall = (nodejsFunctionMock.mock.calls as unknown[][]).find(
+      ([, id]) => id === "ChatStreamingFunction",
+    );
+    const chatFunctionConfig = chatFunctionCall?.[2] as ChatFunctionConfig;
+    const copyCommands = chatFunctionConfig.bundling?.commandHooks?.beforeBundling?.(
+      "/asset-input",
+      "/asset-output",
+    );
+    expect(copyCommands).toEqual([
+      "mkdir -p /asset-output/src/ai && cp -R /asset-input/src/ai/skills /asset-output/src/ai/skills",
+    ]);
+
     expect(addFunctionUrlMock).toHaveBeenCalledTimes(2);
     const canaryFunctionUrlConfig = addFunctionUrlMock.mock.calls.at(0)?.at(0) as unknown;
     const chatFunctionUrlConfig = addFunctionUrlMock.mock.calls.at(1)?.at(0) as unknown;
@@ -177,7 +205,7 @@ describe("Amplify backend", () => {
     expect(policyStatementMock).toHaveBeenCalledWith(
       expect.objectContaining({
         actions: expect.arrayContaining(["dynamodb:GetItem", "dynamodb:Query"]),
-        resources: expect.arrayContaining(["arn:session", "arn:message"]),
+        resources: expect.arrayContaining(["arn:session", "arn:message", "arn:artifact"]),
       }),
     );
     expect(policyStatementMock).toHaveBeenCalledWith(

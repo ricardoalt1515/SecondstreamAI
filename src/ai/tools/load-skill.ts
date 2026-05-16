@@ -4,11 +4,16 @@ import { tool } from "ai";
 import { z } from "zod";
 
 const DEFAULT_SKILLS_DIR = join(process.cwd(), "src/ai/skills");
+const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 function stripFrontmatter(content: string): string {
   const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
   return match ? content.slice(match[0].length).trim() : content.trim();
 }
+
+// Skill files are immutable for the lifetime of the Lambda/Node process; cache the
+// stripped body per `baseDir + name` so warm invocations avoid filesystem reads.
+const skillBodyCache = new Map<string, string>();
 
 export const createLoadSkillTool = (baseDir: string = DEFAULT_SKILLS_DIR) =>
   tool({
@@ -18,13 +23,35 @@ export const createLoadSkillTool = (baseDir: string = DEFAULT_SKILLS_DIR) =>
       name: z.string().describe("The exact skill name to load (matches the skill directory name)."),
     }),
     execute: async ({ name }) => {
+      if (!SKILL_NAME_PATTERN.test(name)) {
+        return {
+          skillName: name,
+          content: "",
+          loaded: false,
+          error: `Invalid skill name '${name}'. Use a directory name such as 'h2o-field-brief'.`,
+        };
+      }
+
+      const cacheKey = `${baseDir}::${name}`;
+      const cached = skillBodyCache.get(cacheKey);
+      if (cached !== undefined) {
+        return {
+          skillName: name,
+          skillDirectory: join(baseDir, name),
+          content: cached,
+          loaded: true,
+        };
+      }
+
       try {
         const skillPath = join(baseDir, name, "SKILL.md");
         const content = await readFile(skillPath, "utf-8");
         const body = stripFrontmatter(content);
+        skillBodyCache.set(cacheKey, body);
 
         return {
           skillName: name,
+          skillDirectory: join(baseDir, name),
           content: body,
           loaded: true,
         };
@@ -38,5 +65,10 @@ export const createLoadSkillTool = (baseDir: string = DEFAULT_SKILLS_DIR) =>
       }
     },
   });
+
+// Test-only escape hatch; production code never calls this.
+export const __resetLoadSkillCacheForTests = (): void => {
+  skillBodyCache.clear();
+};
 
 export const loadSkillTool = createLoadSkillTool();

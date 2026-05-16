@@ -26,6 +26,7 @@ const schema = a.schema({
       messages: a.hasMany("Message", "sessionId"),
       files: a.hasMany("File", "sessionId"),
       outputs: a.hasMany("GeneratedOutput", "sessionId"),
+      artifacts: a.hasMany("Artifact", "threadId"),
     })
     .authorization((allow) => [allow.owner()]),
   Message: a
@@ -63,6 +64,22 @@ const schema = a.schema({
       title: a.string(),
       metadataJson: a.json(),
     })
+    .authorization((allow) => [allow.owner()]),
+  Artifact: a
+    .model({
+      userId: a.id().required(),
+      threadId: a.id().required(),
+      thread: a.belongsTo("Session", "threadId"),
+      kind: a.string().required(),
+      status: a.enum(["ready", "failed"]),
+      title: a.string().required(),
+      customerSlug: a.string(),
+      payloadVersion: a.integer().required(),
+      payload: a.json().required(),
+      createdAtIso: a.string().required(),
+      updatedAtIso: a.string().required(),
+    })
+    .secondaryIndexes((index) => [index("threadId"), index("userId")])
     .authorization((allow) => [allow.owner()]),
 });
 

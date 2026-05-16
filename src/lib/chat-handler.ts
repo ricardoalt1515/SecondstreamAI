@@ -6,8 +6,12 @@ import {
   validateUIMessages,
 } from "ai";
 import { nanoid } from "nanoid";
-import type { Agent } from "@/ai/agents/agent";
+import { type Agent, H2O_AGENT_INSTRUCTIONS } from "@/ai/agents/agent";
+import { createH2oArtifactTools } from "@/ai/tools/h2o-artifacts";
 import { MODELS } from "@/config/models";
+import type { ArtifactStore } from "@/lib/artifacts/artifact-store";
+import { buildArtifactTriggerReminder } from "@/lib/artifacts/artifact-trigger";
+import type { ArtifactPdfStorage } from "@/lib/artifacts/pdf-storage";
 import type { OwnerContext } from "@/lib/auth/owner-context";
 import { bedrockProvider } from "@/lib/bedrock-provider";
 import {
@@ -34,10 +38,22 @@ type GenerateTextFn = typeof generateText;
 
 const titleModel = bedrockProvider(MODELS[0].runtimeModelId);
 
+type CreateAgentInput = {
+  artifactContext?: {
+    owner: OwnerContext;
+    threadId: string;
+  };
+  tools?: ReturnType<typeof createH2oArtifactTools>;
+};
+
 type Dependencies = {
   chatStore: ChatStore;
   blobStore: BlobStore;
-  agent: Agent;
+  agent?: Agent;
+  createAgent?: (input: CreateAgentInput) => Agent;
+  artifactStore?: ArtifactStore;
+  pdfStorage?: ArtifactPdfStorage;
+  artifactBaseUrl?: string;
   generateText: GenerateTextFn;
   getOwner: () => Promise<OwnerContext>;
 };
@@ -322,8 +338,57 @@ export const createChatPostHandler = (deps: Dependencies) => {
       throw error;
     }
 
-    const uiMessages = historyForModel.map(({ id: _id, ...rest }) => rest);
-    const modelMessages = await convertToModelMessages(uiMessages);
+    const artifactTools =
+      deps.artifactStore && deps.pdfStorage
+        ? createH2oArtifactTools({
+            artifactStore: deps.artifactStore,
+            pdfStorage: deps.pdfStorage,
+            baseUrl: deps.artifactBaseUrl,
+            owner,
+            threadId: params.threadId,
+          })
+        : undefined;
+    const requestAgent = deps.createAgent
+      ? deps.createAgent({
+          artifactContext: { owner, threadId: params.threadId },
+          tools: artifactTools,
+        })
+      : deps.agent;
+
+    if (!requestAgent) {
+      throw new Error("Chat handler requires an agent or createAgent dependency.");
+    }
+
+    const artifactReminder = artifactTools
+      ? buildArtifactTriggerReminder({ messages: historyForModel })
+      : null;
+    const uiMessages = [
+      ...historyForModel.map(({ id: _id, ...rest }) => rest),
+      ...(artifactReminder
+        ? [
+            {
+              role: "user" as const,
+              parts: [{ type: "text" as const, text: artifactReminder }],
+            },
+          ]
+        : []),
+    ];
+    const convertedMessages = await convertToModelMessages(uiMessages);
+    // Prepend a system message with Bedrock cachePoint so the H2O instructions
+    // (large, stable per turn) hit Anthropic's prompt cache. Sonnet 4.6 supports
+    // a 1-hour TTL. The cache write happens on the first turn of a thread; every
+    // subsequent step in the same loop and every subsequent turn within the TTL
+    // reads the cache instead of paying the full input cost again.
+    const modelMessages = [
+      {
+        role: "system" as const,
+        content: H2O_AGENT_INSTRUCTIONS,
+        providerOptions: {
+          bedrock: { cachePoint: { type: "default", ttl: "1h" } },
+        },
+      },
+      ...convertedMessages,
+    ];
 
     const stream = createUIMessageStream<MyUIMessage>({
       execute: async ({ writer }) => {
@@ -342,8 +407,12 @@ export const createChatPostHandler = (deps: Dependencies) => {
             });
           }
 
-          const result = await deps.agent.stream({
+          const result = await requestAgent.stream({
             messages: modelMessages,
+            // Lambda timeout is 5min; batch tool runs Promise.all (~1min worst-case),
+            // cap at 2min with 2× margin so we surface a clean timeout error
+            // to the client instead of an abrupt Lambda kill.
+            timeout: { totalMs: 120_000 },
           });
 
           writer.merge(
